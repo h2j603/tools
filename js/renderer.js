@@ -1,9 +1,12 @@
 /* ═══════════════════════════════════
-   Renderer: Background, Tiles, Effects
+   Renderer v3.1
+   Background, Tiles, Effects (incl. 3D)
    ═══════════════════════════════════ */
 
 let gradientBuffer = null;
 let gradientDirty = true;
+
+// ── Background ──
 
 function drawBackground() {
     let c1 = color(document.getElementById('bgColor').value);
@@ -12,7 +15,6 @@ function drawBackground() {
     if (gradientType === 'none') {
         background(c1);
     } else {
-        // Cache gradient to offscreen buffer for performance
         if (gradientDirty || !gradientBuffer || gradientBuffer.width !== width) {
             gradientBuffer = createGraphics(width, height);
             if (gradientType === 'linear') renderLinearGradient(gradientBuffer, c1, c2);
@@ -36,9 +38,8 @@ function renderLinearGradient(g, c1, c2) {
     let ar = radians(gradAngle);
     let cx = g.width / 2, cy = g.height / 2;
     let diag = sqrt(g.width * g.width + g.height * g.height);
-    let steps = ceil(diag);
-    for (let i = 0; i <= steps; i++) {
-        g.stroke(lerpColor(c1, c2, i / steps));
+    for (let i = 0; i <= diag; i++) {
+        g.stroke(lerpColor(c1, c2, i / diag));
         let px = cos(ar + HALF_PI) * diag;
         let py = sin(ar + HALF_PI) * diag;
         let ox = cos(ar) * (i - diag / 2);
@@ -73,7 +74,9 @@ function generateNoiseBuffer() {
 
 function markGradientDirty() { gradientDirty = true; }
 
-// ── Draw Layers ──
+// ═══════════════════════════════════
+// Draw Layers
+// ═══════════════════════════════════
 
 function drawLayers(frameNum) {
     for (let i = 0; i < layers.length; i++) {
@@ -95,17 +98,29 @@ function drawLayers(frameNum) {
         drawingContext.globalAlpha = L.opacity / 100;
         drawingContext.globalCompositeOperation = L.blendMode;
         translate(L.offsetX, L.offsetY);
+
         if (L.effects.web) drawWebLines(L);
-        drawTiles(L, frameNum);
+
+        // 3D rotation wraps the tile drawing
+        if (L.effects.rotate3d) {
+            draw3DRotatedTiles(L, frameNum);
+        } else {
+            drawTiles(L, frameNum);
+        }
+
         pop();
     }
 }
+
+// ═══════════════════════════════════
+// Morph
+// ═══════════════════════════════════
 
 function updateMorphedTiles(L) {
     let count = min(L.tiles1.length, L.tiles2.length);
     L.currentTiles = [];
     let t = L.morphProgress;
-    let eased = t * t * (3 - 2 * t); // Hermite
+    let eased = t * t * (3 - 2 * t);
 
     for (let i = 0; i < count; i++) {
         let idx1 = floor(map(i, 0, count, 0, L.tiles1.length));
@@ -126,13 +141,17 @@ function updateMorphedTiles(L) {
         });
     }
 
-    // Include extra tiles from whichever set is larger
+    // Extra tiles from larger set fade in/out
     let bigger = L.tiles1.length > L.tiles2.length ? L.tiles1 : L.tiles2;
     for (let i = count; i < bigger.length; i++) {
         let fade = L.tiles1.length > L.tiles2.length ? (1 - eased) : eased;
         L.currentTiles.push({ x: bigger[i].x, y: bigger[i].y, index: i, size: bigger[i].size, alpha: fade });
     }
 }
+
+// ═══════════════════════════════════
+// Web Lines
+// ═══════════════════════════════════
 
 function drawWebLines(L) {
     strokeWeight(0.6);
@@ -157,6 +176,10 @@ function drawWebLines(L) {
     }
 }
 
+// ═══════════════════════════════════
+// Standard Tile Drawing
+// ═══════════════════════════════════
+
 function drawTiles(L, frameNum) {
     let baseSz = min(width, height) * (L.tileSize / 100);
     let tiles = L.currentTiles;
@@ -176,14 +199,27 @@ function drawTiles(L, frameNum) {
         push();
         translate(t.x, t.y);
 
+        // WAVE effect
         if (L.effects.wave) {
-            let waveOff = sin(fn * 0.03 + t.x * 0.01) * 8 + cos(fn * 0.02 + t.y * 0.01) * 6;
-            translate(0, waveOff);
+            let wx = sin(fn * 0.03 + t.x * 0.008) * 8;
+            let wy = cos(fn * 0.025 + t.y * 0.008) * 6;
+            translate(wx, wy);
         }
 
+        // VORTEX effect — spiral motion around center
+        if (L.effects.vortex) {
+            let dx = t.x - width / 2;
+            let dy = t.y - height / 2;
+            let dist = sqrt(dx * dx + dy * dy);
+            let ang = fn * 0.01 + dist * 0.005;
+            let r = sin(fn * 0.02) * min(dist * 0.08, 20);
+            translate(cos(ang) * r, sin(ang) * r);
+        }
+
+        // ROTATE effect (per-tile random rotation)
         if (L.effects.rotate) {
             randomSeed(i);
-            rotate(random(-0.4, 0.4) + (L.effects.pulse ? sin(fn * 0.02 + i) * 0.1 : 0));
+            rotate(random(-0.4, 0.4));
         }
 
         if (tileAlpha < 1) drawingContext.globalAlpha *= tileAlpha;
@@ -198,6 +234,125 @@ function drawTiles(L, frameNum) {
         pop();
     }
 }
+
+// ═══════════════════════════════════
+// 3D Rotation Effect
+// Pseudo-3D: project tiles through perspective
+// rotates entire text around Y-axis (or X-axis)
+// ═══════════════════════════════════
+
+function draw3DRotatedTiles(L, frameNum) {
+    let baseSz = min(width, height) * (L.tileSize / 100);
+    let tiles = L.currentTiles;
+    let fn = frameNum || frameCount;
+
+    let cx = width / 2;
+    let cy = height / 2;
+    let focalLen = width * 1.2; // perspective focal length
+
+    // Rotation angle oscillates
+    let rotY = sin(fn * 0.015) * 0.8; // -0.8 to 0.8 radians (~46 degrees)
+    let rotX = sin(fn * 0.01 + 1) * 0.3;
+
+    let cosY = cos(rotY), sinY = sin(rotY);
+    let cosX = cos(rotX), sinX = sin(rotX);
+
+    noStroke();
+
+    // Sort tiles by projected Z for correct depth ordering
+    let projected = [];
+    for (let i = 0; i < tiles.length; i++) {
+        let t = tiles[i];
+        // Translate to center
+        let x = t.x - cx;
+        let y = t.y - cy;
+        let z = 0;
+
+        // Rotate around Y axis
+        let x2 = x * cosY - z * sinY;
+        let z2 = x * sinY + z * cosY;
+
+        // Rotate around X axis
+        let y2 = y * cosX - z2 * sinX;
+        let z3 = y * sinX + z2 * cosX;
+
+        // Perspective projection
+        let scale = focalLen / (focalLen + z3);
+        if (scale < 0.05) continue; // Behind camera
+
+        projected.push({
+            sx: cx + x2 * scale,
+            sy: cy + y2 * scale,
+            z: z3,
+            scale: scale,
+            origIdx: i,
+            origTile: t
+        });
+    }
+
+    // Sort back-to-front
+    projected.sort((a, b) => b.z - a.z);
+
+    for (let p of projected) {
+        let t = p.origTile;
+        let sz = baseSz * (t.size || 1) * p.scale;
+
+        if (L.effects.pulse) {
+            sz *= sin(fn * 0.05 + p.origIdx * 0.3) * 0.2 + 1;
+        }
+
+        // Depth-based alpha (further = dimmer)
+        let depthAlpha = map(p.scale, 0.3, 1.5, 0.3, 1);
+        depthAlpha = constrain(depthAlpha, 0.1, 1);
+
+        let tileAlpha = (t.alpha !== undefined ? t.alpha : 1) * depthAlpha;
+
+        push();
+        translate(p.sx, p.sy);
+
+        if (L.effects.wave) {
+            translate(sin(fn * 0.03 + t.x * 0.008) * 5, 0);
+        }
+
+        drawingContext.globalAlpha *= tileAlpha;
+
+        if (img) {
+            image(img, -sz / 2, -sz / 2, sz, sz);
+        } else {
+            let c = getImageColor(t.x, t.y);
+            fill(c);
+            rect(-sz / 2, -sz / 2, sz, sz);
+        }
+        pop();
+    }
+}
+
+// ═══════════════════════════════════
+// Explode/Gather Effect
+// Tiles fly out from center then reassemble
+// ═══════════════════════════════════
+
+function applyExplodeEffect(L, frameNum) {
+    let fn = frameNum || frameCount;
+    let cycle = (fn * 0.008) % (TWO_PI); // full cycle
+    let t = (sin(cycle) + 1) / 2; // 0→1→0 oscillation
+    let force = t * min(width, height) * 0.4;
+
+    let cx = width / 2;
+    let cy = height / 2;
+
+    for (let tile of L.currentTiles) {
+        let dx = tile.x - cx;
+        let dy = tile.y - cy;
+        let dist = sqrt(dx * dx + dy * dy) || 1;
+        tile._renderX = tile.x + (dx / dist) * force * (1 + sin(tile.index * 0.5) * 0.3);
+        tile._renderY = tile.y + (dy / dist) * force * (1 + cos(tile.index * 0.7) * 0.3);
+    }
+}
+
+// ═══════════════════════════════════
+// Utility
+// ═══════════════════════════════════
 
 function getImageColor(x, y) {
     if (!img) return color(200);

@@ -24,7 +24,7 @@ class Layer {
         this.opacity = 100;
         this.blendMode = 'source-over';
         this.morphDuration = 2;
-        this.effects = { web: false, rotate: false, pulse: false, morph: false, wave: false };
+        this.effects = { web: false, rotate: false, pulse: false, morph: false, wave: false, rotate3d: false, vortex: false };
         this.tiles1 = [];
         this.tiles2 = [];
         this.currentTiles = [];

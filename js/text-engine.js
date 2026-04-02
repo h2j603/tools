@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════
-   Text Point Extraction Engine
-   3 modes: fill, outline, density
+   Text Point Extraction Engine v3.1
+   Precision-focused with 3 modes
    ═══════════════════════════════════ */
 
 function extractTextPoints(txt, L) {
@@ -60,20 +60,28 @@ function extractTextPoints(txt, L) {
     return extractFillPoints(px, width, height, tilePx);
 }
 
-// ── FILL mode: grid sampling with jitter ──
+// ── FILL mode: precise grid-aligned sampling ──
+// Key improvement: minimal jitter to preserve text shape
 function extractFillPoints(px, w, h, tilePx) {
     let points = [];
     let step = tilePx;
+    let halfStep = step * 0.5;
+
     for (let y = 0; y < h; y += step) {
         for (let x = 0; x < w; x += step) {
-            let sx = floor(x + step * 0.5);
-            let sy = floor(y + step * 0.5);
+            // Sample center of each tile cell
+            let sx = floor(x + halfStep);
+            let sy = floor(y + halfStep);
             if (sx >= w || sy >= h) continue;
+
             let idx = (sy * w + sx) * 4;
-            if (px[idx + 3] > 128) {
+            if (px[idx + 3] > 100) {
+                // Tiny jitter (10-15% of step) to avoid mechanical grid look
+                // but preserve text shape accuracy
+                let jitter = step * 0.12;
                 points.push({
-                    x: x + random(step * 0.1, step * 0.9),
-                    y: y + random(step * 0.1, step * 0.9),
+                    x: x + halfStep + random(-jitter, jitter),
+                    y: y + halfStep + random(-jitter, jitter),
                     index: points.length
                 });
             }
@@ -82,31 +90,32 @@ function extractFillPoints(px, w, h, tilePx) {
     return points;
 }
 
-// ── OUTLINE mode: edge detection via alpha gradient ──
+// ── OUTLINE mode: Sobel-like edge detection ──
 function extractOutlinePoints(px, w, h, tilePx) {
     let points = [];
-    let step = max(2, floor(tilePx * 0.7));
-    let threshold = 80;
+    let step = max(2, floor(tilePx * 0.6));
 
-    for (let y = step; y < h - step; y += step) {
-        for (let x = step; x < w - step; x += step) {
-            let idx = (y * w + x) * 4;
-            let a = px[idx + 3];
+    for (let y = 1; y < h - 1; y += step) {
+        for (let x = 1; x < w - 1; x += step) {
+            // Sobel gradient approximation
+            let aL  = px[(y * w + (x - 1)) * 4 + 3];
+            let aR  = px[(y * w + (x + 1)) * 4 + 3];
+            let aU  = px[((y - 1) * w + x) * 4 + 3];
+            let aD  = px[((y + 1) * w + x) * 4 + 3];
+            let aUL = px[((y - 1) * w + (x - 1)) * 4 + 3];
+            let aUR = px[((y - 1) * w + (x + 1)) * 4 + 3];
+            let aDL = px[((y + 1) * w + (x - 1)) * 4 + 3];
+            let aDR = px[((y + 1) * w + (x + 1)) * 4 + 3];
 
-            // Check neighbors for edge
-            let aL = px[(y * w + (x - step)) * 4 + 3] || 0;
-            let aR = px[(y * w + (x + step)) * 4 + 3] || 0;
-            let aU = px[((y - step) * w + x) * 4 + 3] || 0;
-            let aD = px[((y + step) * w + x) * 4 + 3] || 0;
+            let gx = (-aUL + aUR - 2 * aL + 2 * aR - aDL + aDR);
+            let gy = (-aUL - 2 * aU - aUR + aDL + 2 * aD + aDR);
+            let mag = sqrt(gx * gx + gy * gy);
 
-            let gradX = abs(aR - aL);
-            let gradY = abs(aD - aU);
-            let grad = gradX + gradY;
-
-            if (grad > threshold) {
+            if (mag > 200) {
+                let jitter = step * 0.08;
                 points.push({
-                    x: x + random(-step * 0.3, step * 0.3),
-                    y: y + random(-step * 0.3, step * 0.3),
+                    x: x + random(-jitter, jitter),
+                    y: y + random(-jitter, jitter),
                     index: points.length
                 });
             }
@@ -115,24 +124,21 @@ function extractOutlinePoints(px, w, h, tilePx) {
     return points;
 }
 
-// ── DENSITY mode: more tiles where image is brighter ──
+// ── DENSITY mode: image brightness modulates tile density ──
 function extractDensityPoints(px, w, h, tilePx) {
     let points = [];
-    let step = tilePx;
-    let maxStep = tilePx * 2.5;
-    let minStep = tilePx * 0.4;
+    let baseStep = tilePx;
 
-    for (let y = 0; y < h;) {
-        let rowStep = step;
-        for (let x = 0; x < w;) {
-            let sx = floor(min(x + step * 0.5, w - 1));
-            let sy = floor(min(y + step * 0.5, h - 1));
+    // Two-pass: first regular grid, then subdivide bright areas
+    for (let y = 0; y < h; y += baseStep) {
+        for (let x = 0; x < w; x += baseStep) {
+            let sx = floor(min(x + baseStep * 0.5, w - 1));
+            let sy = floor(min(y + baseStep * 0.5, h - 1));
             let idx = (sy * w + sx) * 4;
-            let a = px[idx + 3];
 
-            if (a > 128) {
-                // Use image brightness to vary density if image available
-                let brightness = 1;
+            if (px[idx + 3] > 100) {
+                // Get image brightness at this position
+                let brightness = 0.5;
                 if (img) {
                     let ix = constrain(floor(map(sx, 0, w, 0, img.width)), 0, img.width - 1);
                     let iy = constrain(floor(map(sy, 0, h, 0, img.height)), 0, img.height - 1);
@@ -140,21 +146,33 @@ function extractDensityPoints(px, w, h, tilePx) {
                     brightness = (red(c) + green(c) + blue(c)) / (3 * 255);
                 }
 
-                // Brighter areas = smaller tiles = denser
-                let localStep = lerp(minStep, maxStep, 1 - brightness);
-                points.push({
-                    x: x + random(localStep * 0.1, localStep * 0.9),
-                    y: y + random(localStep * 0.1, localStep * 0.9),
-                    index: points.length,
-                    size: lerp(0.5, 1.5, brightness)
-                });
-                x += localStep;
-                rowStep = localStep;
-            } else {
-                x += step;
+                // Subdivide: brighter areas get 2x2 sub-tiles
+                if (brightness > 0.6) {
+                    let subStep = baseStep * 0.5;
+                    for (let sy2 = 0; sy2 < 2; sy2++) {
+                        for (let sx2 = 0; sx2 < 2; sx2++) {
+                            let px2 = x + sx2 * subStep + subStep * 0.5;
+                            let py2 = y + sy2 * subStep + subStep * 0.5;
+                            let jitter = subStep * 0.1;
+                            points.push({
+                                x: px2 + random(-jitter, jitter),
+                                y: py2 + random(-jitter, jitter),
+                                index: points.length,
+                                size: lerp(0.4, 0.7, brightness)
+                            });
+                        }
+                    }
+                } else {
+                    let jitter = baseStep * 0.1;
+                    points.push({
+                        x: x + baseStep * 0.5 + random(-jitter, jitter),
+                        y: y + baseStep * 0.5 + random(-jitter, jitter),
+                        index: points.length,
+                        size: lerp(0.8, 1.4, 1 - brightness)
+                    });
+                }
             }
         }
-        y += rowStep || step;
     }
     return points;
 }
