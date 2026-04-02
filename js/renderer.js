@@ -452,31 +452,79 @@ function draw3DRotatedTiles(L, frameNum) {
 
     let cx = width / 2, cy = height / 2;
     let focalLen = width * 1.2;
+    let maxDim = min(width, height);
 
-    let rotY = sin(fn * 0.015) * 0.8;
-    let rotX = sin(fn * 0.01 + 1) * 0.3;
-    let cosY = cos(rotY), sinY = sin(rotY);
-    let cosX = cos(rotX), sinX = sin(rotX);
+    // Global rotation (gentle base)
+    let baseRotY = sin(fn * 0.012) * 0.4;
+    let baseRotX = sin(fn * 0.008 + 1) * 0.15;
 
     noStroke();
 
     let projected = [];
     for (let i = 0; i < tiles.length; i++) {
         let t = tiles[i];
-        let x = t.x - cx, y = t.y - cy, z = 0;
+        let x = t.x - cx;
+        let y = t.y - cy;
+
+        // ── Per-tile individual Z depth ──
+        // Each tile gets its own z based on:
+        // 1) Distance from center (further = more depth variation)
+        // 2) A ripple wave that propagates outward over time
+        // 3) Image brightness (brighter tiles float forward)
+        let distFromCenter = sqrt(x * x + y * y);
+        let normalizedDist = distFromCenter / (maxDim * 0.5);
+
+        // Ripple: concentric wave emanating from center
+        let ripplePhase = distFromCenter * 0.015 - fn * 0.04;
+        let rippleZ = sin(ripplePhase) * maxDim * 0.08;
+
+        // Per-tile wobble (each tile has its own rhythm)
+        let tilePhase = i * 0.7 + fn * 0.025;
+        let wobbleZ = sin(tilePhase) * maxDim * 0.03;
+
+        // Brightness-based depth push
+        let brightnessZ = 0;
+        if (img) {
+            let c = getImageColor(t.x, t.y);
+            let bri = (red(c) + green(c) + blue(c)) / (3 * 255);
+            brightnessZ = (bri - 0.5) * maxDim * 0.06;
+        }
+
+        let z = rippleZ + wobbleZ + brightnessZ;
+
+        // ── Per-tile rotation offset ──
+        // Tiles further from center rotate more (parallax)
+        let tileRotY = baseRotY + sin(fn * 0.02 + i * 0.3) * 0.12 * normalizedDist;
+        let tileRotX = baseRotX + cos(fn * 0.015 + i * 0.5) * 0.08 * normalizedDist;
+
+        let cosY = cos(tileRotY), sinY = sin(tileRotY);
+        let cosX = cos(tileRotX), sinX = sin(tileRotX);
+
+        // Rotate around Y axis
         let x2 = x * cosY - z * sinY;
         let z2 = x * sinY + z * cosY;
+
+        // Rotate around X axis
         let y2 = y * cosX - z2 * sinX;
         let z3 = y * sinX + z2 * cosX;
+
+        // Perspective projection
         let scale = focalLen / (focalLen + z3);
-        if (scale < 0.05) continue;
+        if (scale < 0.05 || scale > 4) continue;
 
         projected.push({
-            sx: cx + x2 * scale, sy: cy + y2 * scale,
-            z: z3, scale: scale, origIdx: i, origTile: t
+            sx: cx + x2 * scale,
+            sy: cy + y2 * scale,
+            z: z3,
+            scale: scale,
+            origIdx: i,
+            origTile: t,
+            // Per-tile 2D rotation for "card flip" feel
+            tileRot: sin(fn * 0.02 + i * 0.4) * 0.15
         });
     }
 
+    // Sort back-to-front for correct overlap
     projected.sort((a, b) => b.z - a.z);
 
     for (let p of projected) {
@@ -485,11 +533,16 @@ function draw3DRotatedTiles(L, frameNum) {
 
         if (L.effects.pulse) sz *= sin(fn * 0.05 + p.origIdx * 0.3) * 0.2 + 1;
 
-        let depthAlpha = constrain(map(p.scale, 0.3, 1.5, 0.3, 1), 0.1, 1);
+        // Depth alpha: further tiles dimmer, closer tiles brighter
+        let depthAlpha = constrain(map(p.scale, 0.4, 1.4, 0.2, 1), 0.08, 1);
         let tileAlpha = (t.alpha !== undefined ? t.alpha : 1) * depthAlpha;
 
         push();
         translate(p.sx, p.sy);
+
+        // Per-tile subtle rotation
+        rotate(p.tileRot);
+
         if (L.effects.wave) translate(sin(fn * 0.03 + t.x * 0.008) * 5, 0);
         drawingContext.globalAlpha *= tileAlpha;
 
