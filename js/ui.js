@@ -144,6 +144,9 @@ function loadLayerToUI(L) {
     document.querySelectorAll('.tilemode-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.mode === L.tileMode);
     });
+    document.querySelectorAll('.tileshape-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.shape === L.tileShape);
+    });
 }
 
 // ── Event Bindings ──
@@ -233,6 +236,15 @@ function bindLayerSettingsEvents() {
             btn.classList.add('active');
             generateLayerTiles(L);
             updateTileCountUI();
+        });
+    });
+
+    document.querySelectorAll('.tileshape-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            let L = activeLayer(); if (!L) return;
+            L.tileShape = btn.dataset.shape;
+            document.querySelectorAll('.tileshape-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
         });
     });
 

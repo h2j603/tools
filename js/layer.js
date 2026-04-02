@@ -16,6 +16,7 @@ class Layer {
         this.fontSize = 50;
         this.tileSize = 5;
         this.tileMode = 'fill'; // fill, outline, density
+        this.tileShape = 'rect'; // rect, circle, char, adaptive, cross
         this.scaleX = 100;
         this.letterSpace = 0;
         this.lineHeight = 120;

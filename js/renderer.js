@@ -273,6 +273,11 @@ function drawTiles(L, frameNum) {
     let baseSz = min(width, height) * (L.tileSize / 100);
     let tiles = L.currentTiles;
     let fn = frameNum || frameCount;
+    let shape = L.tileShape || 'rect';
+
+    // Pre-extract char array for 'char' shape
+    let charSource = (L.text || 'A').replace(/\s/g, '');
+    if (charSource.length === 0) charSource = 'A';
 
     noStroke();
     for (let i = 0; i < tiles.length; i++) {
@@ -308,14 +313,129 @@ function drawTiles(L, frameNum) {
 
         if (tileAlpha < 1) drawingContext.globalAlpha *= tileAlpha;
 
-        if (img) {
-            image(img, -sz / 2, -sz / 2, sz, sz);
-        } else {
-            let c = getImageColor(t.x, t.y);
-            fill(c);
-            rect(-sz / 2, -sz / 2, sz, sz);
+        let c = getImageColor(t.x, t.y);
+
+        switch (shape) {
+            case 'circle':
+                drawTileCircle(sz, c);
+                break;
+            case 'char':
+                drawTileChar(sz, c, charSource, i, L);
+                break;
+            case 'adaptive':
+                drawTileAdaptive(sz, c, t);
+                break;
+            case 'cross':
+                drawTileCross(sz, c);
+                break;
+            default: // rect
+                drawTileRect(sz, c);
+                break;
         }
+
         pop();
+    }
+}
+
+// ── Tile Shape: Rect (default) ──
+function drawTileRect(sz, c) {
+    if (img) {
+        image(img, -sz / 2, -sz / 2, sz, sz);
+    } else {
+        fill(c);
+        rect(-sz / 2, -sz / 2, sz, sz);
+    }
+}
+
+// ── Tile Shape: Circle (halftone) ──
+function drawTileCircle(sz, c) {
+    if (img) {
+        // Clip image to circle using drawingContext
+        drawingContext.save();
+        drawingContext.beginPath();
+        drawingContext.arc(0, 0, sz / 2, 0, TWO_PI);
+        drawingContext.clip();
+        image(img, -sz / 2, -sz / 2, sz, sz);
+        drawingContext.restore();
+    } else {
+        fill(c);
+        ellipse(0, 0, sz, sz);
+    }
+}
+
+// ── Tile Shape: Character ──
+// Each tile draws one character from the source text, colored by image
+function drawTileChar(sz, c, charSource, idx, L) {
+    let ch = charSource[idx % charSource.length];
+    let fontSize = sz * 1.1;
+
+    fill(red(c), green(c), blue(c));
+    textAlign(CENTER, CENTER);
+    textFont(L.fontFamily);
+    textStyle(L.fontWeight === '700' ? BOLD : (L.fontWeight === '900' ? BOLD : NORMAL));
+    textSize(fontSize);
+    text(ch, 0, 0);
+}
+
+// ── Tile Shape: Adaptive ──
+// Bright areas → circle, dark areas → rect, mid → rounded rect
+// Size also varies with brightness
+function drawTileAdaptive(sz, c, t) {
+    let brightness = (red(c) + green(c) + blue(c)) / (3 * 255);
+
+    // Size varies: brighter = smaller (like halftone inversion)
+    let adaptSz = sz * lerp(1.3, 0.6, brightness);
+
+    if (img) {
+        if (brightness > 0.65) {
+            // Bright: circle
+            drawingContext.save();
+            drawingContext.beginPath();
+            drawingContext.arc(0, 0, adaptSz / 2, 0, TWO_PI);
+            drawingContext.clip();
+            image(img, -adaptSz / 2, -adaptSz / 2, adaptSz, adaptSz);
+            drawingContext.restore();
+        } else if (brightness > 0.35) {
+            // Mid: rounded rect
+            drawingContext.save();
+            let r = adaptSz * 0.3;
+            drawingContext.beginPath();
+            drawingContext.roundRect(-adaptSz / 2, -adaptSz / 2, adaptSz, adaptSz, r);
+            drawingContext.clip();
+            image(img, -adaptSz / 2, -adaptSz / 2, adaptSz, adaptSz);
+            drawingContext.restore();
+        } else {
+            // Dark: full rect, larger
+            image(img, -adaptSz / 2, -adaptSz / 2, adaptSz, adaptSz);
+        }
+    } else {
+        fill(c);
+        if (brightness > 0.65) ellipse(0, 0, adaptSz, adaptSz);
+        else if (brightness > 0.35) rect(-adaptSz / 2, -adaptSz / 2, adaptSz, adaptSz, adaptSz * 0.3);
+        else rect(-adaptSz / 2, -adaptSz / 2, adaptSz, adaptSz);
+    }
+}
+
+// ── Tile Shape: Cross (+) ──
+function drawTileCross(sz, c) {
+    let arm = sz * 0.3;  // arm thickness
+    let half = sz / 2;
+
+    if (img) {
+        // Clip image to cross shape
+        drawingContext.save();
+        drawingContext.beginPath();
+        // Vertical arm
+        drawingContext.rect(-arm / 2, -half, arm, sz);
+        // Horizontal arm
+        drawingContext.rect(-half, -arm / 2, sz, arm);
+        drawingContext.clip();
+        image(img, -half, -half, sz, sz);
+        drawingContext.restore();
+    } else {
+        fill(c);
+        rect(-arm / 2, -half, arm, sz);
+        rect(-half, -arm / 2, sz, arm);
     }
 }
 
@@ -327,6 +447,8 @@ function draw3DRotatedTiles(L, frameNum) {
     let baseSz = min(width, height) * (L.tileSize / 100);
     let tiles = L.currentTiles;
     let fn = frameNum || frameCount;
+    let shape = L.tileShape || 'rect';
+    let charSource = (L.text || 'A').replace(/\s/g, '') || 'A';
 
     let cx = width / 2, cy = height / 2;
     let focalLen = width * 1.2;
@@ -371,13 +493,16 @@ function draw3DRotatedTiles(L, frameNum) {
         if (L.effects.wave) translate(sin(fn * 0.03 + t.x * 0.008) * 5, 0);
         drawingContext.globalAlpha *= tileAlpha;
 
-        if (img) {
-            image(img, -sz / 2, -sz / 2, sz, sz);
-        } else {
-            let c = getImageColor(t.x, t.y);
-            fill(c);
-            rect(-sz / 2, -sz / 2, sz, sz);
+        let c = getImageColor(t.x, t.y);
+
+        switch (shape) {
+            case 'circle': drawTileCircle(sz, c); break;
+            case 'char': drawTileChar(sz, c, charSource, p.origIdx, L); break;
+            case 'adaptive': drawTileAdaptive(sz, c, t); break;
+            case 'cross': drawTileCross(sz, c); break;
+            default: drawTileRect(sz, c); break;
         }
+
         pop();
     }
 }
