@@ -117,36 +117,97 @@ function drawLayers(frameNum) {
 // ═══════════════════════════════════
 
 function updateMorphedTiles(L) {
-    let count = min(L.tiles1.length, L.tiles2.length);
+    let len1 = L.tiles1.length;
+    let len2 = L.tiles2.length;
+    let maxLen = max(len1, len2);
+    if (maxLen === 0) return;
+
     L.currentTiles = [];
     let t = L.morphProgress;
     let eased = t * t * (3 - 2 * t);
 
-    for (let i = 0; i < count; i++) {
-        let idx1 = floor(map(i, 0, count, 0, L.tiles1.length));
-        let idx2 = floor(map(i, 0, count, 0, L.tiles2.length));
-        let t1 = L.tiles1[idx1];
-        let t2 = L.tiles2[idx2];
+    // Build nearest-neighbor map for extra tiles (computed once per morph start)
+    if (!L._nearestMap || L._nearestMapDir !== L.morphDirection) {
+        L._nearestMap = buildNearestMap(L.tiles1, L.tiles2);
+        L._nearestMapDir = L.morphDirection;
+    }
+
+    for (let i = 0; i < maxLen; i++) {
+        // Map index into both arrays — wrap/clamp for the smaller one
+        let hasT1 = i < len1;
+        let hasT2 = i < len2;
+
+        let t1, t2;
+
+        if (hasT1 && hasT2) {
+            // Both exist: direct interpolation
+            t1 = L.tiles1[i];
+            t2 = L.tiles2[i];
+        } else if (hasT1 && !hasT2) {
+            // Extra tile in tiles1: morph toward nearest tile in tiles2
+            t1 = L.tiles1[i];
+            t2 = L._nearestMap.from1to2[i] || t1;
+        } else {
+            // Extra tile in tiles2: morph from nearest tile in tiles1
+            t2 = L.tiles2[i];
+            t1 = L._nearestMap.from2to1[i] || t2;
+        }
 
         let mx = lerp(t1.x, t2.x, eased);
         let my = lerp(t1.y, t2.y, eased);
-        let curve = sin(eased * PI) * 15;
+
+        // Smooth arc during transition
+        let curve = sin(eased * PI) * 12;
         let angle = atan2(t2.y - t1.y, t2.x - t1.x) + HALF_PI;
         mx += cos(angle) * curve * sin(i * 0.1);
         my += sin(angle) * curve * sin(i * 0.1);
 
+        // Extra tiles scale up/down smoothly instead of popping
+        let sizeScale = 1;
+        if (!hasT1) sizeScale = eased;        // grows in as we morph toward tiles2
+        else if (!hasT2) sizeScale = 1 - eased; // shrinks as we leave tiles1
+
         L.currentTiles.push({
             x: mx, y: my, index: i,
-            size: t1.size ? lerp(t1.size, t2.size || 1, eased) : undefined
+            size: (t1.size ? lerp(t1.size, t2.size || 1, eased) : 1) * sizeScale,
+            alpha: max(0.05, sizeScale) // never fully invisible for smooth feel
         });
     }
+}
 
-    // Extra tiles from larger set fade in/out
-    let bigger = L.tiles1.length > L.tiles2.length ? L.tiles1 : L.tiles2;
-    for (let i = count; i < bigger.length; i++) {
-        let fade = L.tiles1.length > L.tiles2.length ? (1 - eased) : eased;
-        L.currentTiles.push({ x: bigger[i].x, y: bigger[i].y, index: i, size: bigger[i].size, alpha: fade });
+// Find nearest neighbor in the other tile set for each extra tile
+function buildNearestMap(tiles1, tiles2) {
+    let from1to2 = {};
+    let from2to1 = {};
+
+    let minLen = min(tiles1.length, tiles2.length);
+
+    // For extra tiles in tiles1 (i >= tiles2.length), find nearest in tiles2
+    for (let i = tiles2.length; i < tiles1.length; i++) {
+        from1to2[i] = findNearest(tiles1[i], tiles2);
     }
+
+    // For extra tiles in tiles2 (i >= tiles1.length), find nearest in tiles1
+    for (let i = tiles1.length; i < tiles2.length; i++) {
+        from2to1[i] = findNearest(tiles2[i], tiles1);
+    }
+
+    return { from1to2, from2to1 };
+}
+
+function findNearest(tile, targets) {
+    let best = null;
+    let bestDist = Infinity;
+    for (let t of targets) {
+        let dx = t.x - tile.x;
+        let dy = t.y - tile.y;
+        let d = dx * dx + dy * dy;
+        if (d < bestDist) {
+            bestDist = d;
+            best = t;
+        }
+    }
+    return best;
 }
 
 // ═══════════════════════════════════
