@@ -162,8 +162,11 @@ async function exportVideo() {
         return;
     }
 
-    // Render each frame on our own schedule
+    // Render each frame with guaranteed encode time
+    // Key: use setTimeout between frames to let encoder process each frame
+    // This prevents frame drops from encoder backpressure
     let frame = 0;
+    let encodeDelay = 1000 / fps; // ~16ms per frame at 60fps
 
     function renderNext() {
         if (frame >= totalFrames) {
@@ -176,24 +179,67 @@ async function exportVideo() {
             for (let L of layers) {
                 L.morphProgress = 0;
                 L.morphDirection = 1;
+                L.morphHolding = false;
+                L.morphHoldTimer = 0;
+                L.morphStepIdx = 0;
+                L._morphPairs = null;
                 if (L.effects.scatter) { L.scatterProgress = 1; L.scatterDirection = -1; }
                 if (L.effects.sequencer) { L.sequencerProgress = 0; }
                 if (L.effects.spring) { L._springState = null; }
             }
         }
 
-        // Advance morph/animation state deterministically
+        // Advance all animation states deterministically
         for (let L of layers) {
-            if (L.effects.morph && L.tiles1.length > 0 && L.tiles2.length > 0) {
-                let ppf = 1 / (L.morphDuration * fps);
-                L.morphProgress += L.morphDirection * ppf;
-                if (L.morphProgress >= 1) { L.morphProgress = 1; L.morphDirection = -1; }
-                else if (L.morphProgress <= 0) { L.morphProgress = 0; L.morphDirection = 1; }
+            // Morph (replicate the same logic from renderer drawLayers)
+            if (L.effects.morph && L.morphSteps && L.morphSteps.length > 1) {
+                if (L.morphHolding) {
+                    L.morphHoldTimer -= 1/fps;
+                    if (L.morphHoldTimer <= 0) {
+                        L.morphHolding = false;
+                        L.morphProgress = 0;
+                        L.morphStepIdx++;
+                        if (L.morphStepIdx >= L.morphSteps.length) L.morphStepIdx = 0;
+                        L._morphPairs = null;
+                    }
+                } else {
+                    let ppf = 1 / (L.morphDuration * fps);
+                    L.morphProgress += ppf;
+                    if (L.morphProgress >= 1) {
+                        L.morphProgress = 1;
+                        if (L.morphHold > 0) {
+                            L.morphHolding = true;
+                            L.morphHoldTimer = L.morphHold;
+                        } else {
+                            L.morphProgress = 0;
+                            L.morphStepIdx++;
+                            if (L.morphStepIdx >= L.morphSteps.length) L.morphStepIdx = 0;
+                            L._morphPairs = null;
+                        }
+                    }
+                }
+                let fromIdx = L.morphStepIdx;
+                let toIdx = (L.morphStepIdx + 1) % L.morphSteps.length;
+                L.tiles1 = L.morphSteps[fromIdx];
+                L.tiles2 = L.morphSteps[toIdx];
+                if (!L._morphPairs) L._morphPairs = buildSpatialMorphMap(L.tiles1, L.tiles2);
                 updateMorphedTiles(L);
+            }
+            // Scatter
+            if (L.effects.scatter) {
+                let spd = 1 / (L.morphDuration * fps);
+                L.scatterProgress += L.scatterDirection * spd;
+                if (L.scatterProgress >= 1) { L.scatterProgress = 1; L.scatterDirection = -1; }
+                else if (L.scatterProgress <= 0) { L.scatterProgress = 0; L.scatterDirection = 1; }
+            }
+            // Sequencer
+            if (L.effects.sequencer) {
+                L.sequencerProgress += 1 / (L.morphDuration * fps * 2);
+                if (L.sequencerProgress > 1.5) L.sequencerProgress = 0;
             }
         }
 
-        // Draw this frame (use our own frame counter, not p5's frameCount)
+        // Draw this frame
         drawBackground();
         if (fontReady) {
             push();
@@ -204,25 +250,21 @@ async function exportVideo() {
             pop();
         }
 
-        // Signal frame to recorder
-        if (track.requestFrame) {
+        // Signal frame to recorder — wait for paint to complete
+        if (track && track.requestFrame) {
             track.requestFrame();
         }
 
         frame++;
         let pct = Math.round((frame / totalFrames) * 100);
         progFill.style.width = pct + '%';
+        if (frame % 6 === 0) updateStatus('내보내기 ' + pct + '%...');
 
-        // Update UI ~10x per second (not every frame)
-        if (frame % 6 === 0) {
-            updateStatus('내보내기 ' + pct + '%...');
-        }
-
-        // Use rAF to yield to browser for UI updates, but WE control frame counting
-        requestAnimationFrame(renderNext);
+        // Give encoder time to process before next frame
+        setTimeout(renderNext, encodeDelay);
     }
 
-    requestAnimationFrame(renderNext);
+    setTimeout(renderNext, 100);
 }
 
 function finishExport(savedOffset, savedZoom, btn, progBar) {
