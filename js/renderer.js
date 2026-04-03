@@ -95,15 +95,32 @@ function drawLayers(frameNum) {
         let L = layers[i];
         if (!L.visible || L.currentTiles.length === 0) continue;
 
-        // Morph update
-        if (L.effects.morph && L.tiles1.length > 0 && L.tiles2.length > 0) {
-            let ppf = 1 / (L.morphDuration * 60);
-            L.morphProgress += L.morphDirection * ppf;
-            if (L.morphProgress >= 1) { L.morphProgress = 1; L.morphDirection = -1; }
-            else if (L.morphProgress <= 0) { L.morphProgress = 0; L.morphDirection = 1; }
+        // Morph update (multi-step with hold/pause)
+        if (L.effects.morph && L.morphSteps && L.morphSteps.length > 1) {
+            if (L.morphHolding) {
+                L.morphHoldTimer -= 1/60;
+                if (L.morphHoldTimer <= 0) L.morphHolding = false;
+            } else {
+                let ppf = 1 / (L.morphDuration * 60);
+                L.morphProgress += ppf;
+                if (L.morphProgress >= 1) {
+                    L.morphProgress = 0;
+                    L.morphStepIdx++;
+                    // Cycle through all steps: 0→1→2→...→N→N-1→...→0→1→...
+                    if (L.morphStepIdx >= L.morphSteps.length - 1) L.morphStepIdx = 0;
+                    // Rebuild morph pairs for new step pair
+                    L._morphPairs = null;
+                    if (L.morphHold > 0) { L.morphHolding = true; L.morphHoldTimer = L.morphHold; }
+                }
+            }
+            // Set tiles1/tiles2 for current step pair
+            let fromIdx = L.morphStepIdx;
+            let toIdx = (L.morphStepIdx + 1) % L.morphSteps.length;
+            L.tiles1 = L.morphSteps[fromIdx];
+            L.tiles2 = L.morphSteps[toIdx];
             updateMorphedTiles(L);
-        } else if (!L.effects.morph && L.tiles1.length > 0) {
-            L.currentTiles = L.tiles1;
+        } else if (!L.effects.morph && L.morphSteps && L.morphSteps.length > 0) {
+            L.currentTiles = L.morphSteps[0];
         }
 
         // Scatter (photo particle rebuild) update

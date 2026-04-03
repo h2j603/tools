@@ -114,6 +114,7 @@ function loadLayerToUI(L) {
     document.getElementById('layerText').value = L.text;
     document.getElementById('layerMorphText').value = L.morphText;
     document.getElementById('layerFont').value = L.fontFamily;
+    document.getElementById('layerMorphFont').value = L.morphFontFamily;
     document.getElementById('layerBlendMode').value = L.blendMode;
 
     let sliders = {
@@ -125,7 +126,8 @@ function loadLayerToUI(L) {
         layerOffsetX: ['layerOffsetXVal', L.offsetX],
         layerOffsetY: ['layerOffsetYVal', L.offsetY],
         layerOpacity: ['layerOpacityVal', L.opacity],
-        layerMorphDuration: ['layerMorphDurVal', L.morphDuration]
+        layerMorphDuration: ['layerMorphDurVal', L.morphDuration],
+        layerMorphHold: ['layerMorphHoldVal', L.morphHold]
     };
 
     for (let [sid, [vid, val]] of Object.entries(sliders)) {
@@ -137,6 +139,9 @@ function loadLayerToUI(L) {
 
     document.querySelectorAll('.weight-btn').forEach(b => {
         b.classList.toggle('active', b.dataset.weight === L.fontWeight);
+    });
+    document.querySelectorAll('.morph-weight-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.weight === L.morphFontWeight);
     });
     document.querySelectorAll('.effect-btn').forEach(btn => {
         btn.classList.toggle('active', L.effects[btn.dataset.effect]);
@@ -226,6 +231,30 @@ function bindLayerSettingsEvents() {
             document.querySelectorAll('.weight-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             generateLayerTiles(L);
+        });
+    });
+
+    document.getElementById('layerMorphFont').addEventListener('change', e => {
+        let L = activeLayer(); if (!L) return;
+        L.morphFontFamily = e.target.value;
+        generateLayerTiles(L);
+    });
+
+    document.querySelectorAll('.morph-weight-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            let L = activeLayer(); if (!L) return;
+            L.morphFontWeight = btn.dataset.weight;
+            document.querySelectorAll('.morph-weight-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            generateLayerTiles(L);
+        });
+    });
+
+    // Export scale buttons
+    document.querySelectorAll('.export-scale-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.export-scale-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
         });
     });
 

@@ -82,28 +82,54 @@
 
                     <div class="field">
                         <label for="layerMorphText">MORPH TEXT</label>
-                        <textarea id="layerMorphText" rows="2" placeholder="모핑 대상 텍스트..." spellcheck="false">B</textarea>
+                        <textarea id="layerMorphText" rows="2" placeholder="모핑 텍스트 (|||로 여러 단계)" spellcheck="false">B</textarea>
                     </div>
 
-                    <div class="field">
-                        <label for="layerFont">FONT</label>
-                        <select id="layerFont">
-                            <option value="kozuka-mincho-pr6n, serif" selected>Kozuka Mincho</option>
-                            <option value="'Noto Sans KR', sans-serif">Noto Sans KR</option>
-                            <option value="serif">Serif (System)</option>
-                            <option value="sans-serif">Sans-serif (System)</option>
-                            <option value="monospace">Monospace</option>
-                            <option value="Georgia, serif">Georgia</option>
-                            <option value="'Courier New', monospace">Courier New</option>
-                        </select>
+                    <div class="row-2">
+                        <div class="field">
+                            <label for="layerFont">FONT</label>
+                            <select id="layerFont">
+                                <option value="kozuka-mincho-pr6n, serif" selected>Kozuka Mincho</option>
+                                <option value="'Noto Sans KR', sans-serif">Noto Sans KR</option>
+                                <option value="serif">Serif</option>
+                                <option value="sans-serif">Sans-serif</option>
+                                <option value="monospace">Monospace</option>
+                                <option value="Georgia, serif">Georgia</option>
+                                <option value="'Courier New', monospace">Courier New</option>
+                                <option value="'Soonbatang', serif">순바탕</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="layerMorphFont">MORPH FONT</label>
+                            <select id="layerMorphFont">
+                                <option value="kozuka-mincho-pr6n, serif" selected>Kozuka Mincho</option>
+                                <option value="'Noto Sans KR', sans-serif">Noto Sans KR</option>
+                                <option value="serif">Serif</option>
+                                <option value="sans-serif">Sans-serif</option>
+                                <option value="monospace">Monospace</option>
+                                <option value="Georgia, serif">Georgia</option>
+                                <option value="'Courier New', monospace">Courier New</option>
+                                <option value="'Soonbatang', serif">순바탕</option>
+                            </select>
+                        </div>
                     </div>
 
-                    <div class="field">
-                        <label>WEIGHT</label>
-                        <div class="toggle-group">
-                            <button class="toggle-btn weight-btn active" data-weight="400">Regular</button>
-                            <button class="toggle-btn weight-btn" data-weight="700">Bold</button>
-                            <button class="toggle-btn weight-btn" data-weight="900">Black</button>
+                    <div class="row-2">
+                        <div class="field">
+                            <label>WEIGHT</label>
+                            <div class="toggle-group">
+                                <button class="toggle-btn weight-btn active" data-weight="400">Rg</button>
+                                <button class="toggle-btn weight-btn" data-weight="700">Bd</button>
+                                <button class="toggle-btn weight-btn" data-weight="900">Bk</button>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label>MORPH WEIGHT</label>
+                            <div class="toggle-group">
+                                <button class="toggle-btn morph-weight-btn active" data-weight="400">Rg</button>
+                                <button class="toggle-btn morph-weight-btn" data-weight="700">Bd</button>
+                                <button class="toggle-btn morph-weight-btn" data-weight="900">Bk</button>
+                            </div>
                         </div>
                     </div>
 
@@ -189,9 +215,15 @@
                         </select>
                     </div>
 
-                    <div class="field">
-                        <label for="layerMorphDuration">MORPH <span class="val" id="layerMorphDurVal">2</span>초</label>
-                        <input type="range" id="layerMorphDuration" min="0.5" max="10" value="2" step="0.5">
+                    <div class="row-2">
+                        <div class="field">
+                            <label for="layerMorphDuration">MORPH <span class="val" id="layerMorphDurVal">2</span>초</label>
+                            <input type="range" id="layerMorphDuration" min="0.5" max="10" value="2" step="0.5">
+                        </div>
+                        <div class="field">
+                            <label for="layerMorphHold">HOLD <span class="val" id="layerMorphHoldVal">0.5</span>초</label>
+                            <input type="range" id="layerMorphHold" min="0" max="5" value="0.5" step="0.1">
+                        </div>
                     </div>
 
                     <div class="field">
@@ -276,6 +308,15 @@
                         </label>
                         <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp,image/gif">
                         <button id="convertBtn" class="btn-action primary">CONVERT</button>
+                    </div>
+
+                    <div class="field">
+                        <label>EXPORT SCALE</label>
+                        <div class="toggle-group">
+                            <button class="toggle-btn export-scale-btn active" data-scale="1">1x</button>
+                            <button class="toggle-btn export-scale-btn" data-scale="2">2x</button>
+                            <button class="toggle-btn export-scale-btn" data-scale="4">4x</button>
+                        </div>
                     </div>
 
                     <div class="row-3">

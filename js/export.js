@@ -5,16 +5,22 @@
 
 let isExporting = false;
 
+function getExportScale() {
+    let active = document.querySelector('.export-scale-btn.active');
+    return active ? parseInt(active.dataset.scale) || 1 : 1;
+}
+
 function saveImage() {
     let so = offset.copy(), sz = zoom;
     offset = createVector(0, 0);
     zoom = 1.0;
 
+    let expScale = getExportScale();
     let oldPD = pixelDensity();
-    pixelDensity(window.devicePixelRatio || 1);
+    pixelDensity(expScale);
     resizeCanvas(width, height);
     drawFrame(frameCount);
-    saveCanvas('TEXT_MOSAIC', 'png');
+    saveCanvas('TEXT_MOSAIC_' + width*expScale + 'x' + height*expScale, 'png');
     pixelDensity(1);
     resizeCanvas(width, height);
 
@@ -28,8 +34,9 @@ function saveTransparentImage() {
     offset = createVector(0, 0);
     zoom = 1.0;
 
+    let expScale = getExportScale();
     let oldPD = pixelDensity();
-    pixelDensity(window.devicePixelRatio || 1);
+    pixelDensity(expScale);
     resizeCanvas(width, height);
 
     // Clear to transparent (not background color)

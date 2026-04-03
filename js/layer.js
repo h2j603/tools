@@ -13,10 +13,12 @@ class Layer {
         this.morphText = 'B';
         this.fontFamily = 'kozuka-mincho-pr6n, serif';
         this.fontWeight = '400';
+        this.morphFontFamily = 'kozuka-mincho-pr6n, serif';
+        this.morphFontWeight = '400';
         this.fontSize = 50;
         this.tileSize = 5;
-        this.tileMode = 'fill'; // fill, outline, density
-        this.tileShape = 'rect'; // rect, circle, char, adaptive, cross, voronoi
+        this.tileMode = 'fill';
+        this.tileShape = 'rect';
         this.scaleX = 100;
         this.letterSpace = 0;
         this.lineHeight = 120;
@@ -25,15 +27,20 @@ class Layer {
         this.opacity = 100;
         this.blendMode = 'source-over';
         this.morphDuration = 2;
+        this.morphHold = 0.5;
         this.effects = { web: false, rotate: false, pulse: false, morph: false, wave: false, rotate3d: false, vortex: false, scatter: false, sequencer: false, spring: false };
         this.scatterProgress = 0;
         this.scatterDirection = 1;
-        this.sequencerProgress = 0; // 0→1 reveal progress
+        this.sequencerProgress = 0;
         this.tiles1 = [];
         this.tiles2 = [];
+        this.morphSteps = [];  // array of tile arrays for multi-morph
+        this.morphStepIdx = 0; // current step index
         this.currentTiles = [];
         this.morphProgress = 0;
         this.morphDirection = 1;
+        this.morphHolding = false;
+        this.morphHoldTimer = 0;
         this.color = LAYER_COLORS[id % LAYER_COLORS.length];
     }
 }
