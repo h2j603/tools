@@ -316,7 +316,8 @@ function drawWebLines(L) {
     let fn = frameCount;
     let ctx = drawingContext;
 
-    // Pass 1: Draw bezier connections
+    // Pass 1: Draw bezier connections (also track connected nodes for pass 2)
+    let connectedNodes = new Set();
     noFill();
     for (let i = 0; i < tiles.length; i++) {
         let t1 = tiles[i];
@@ -364,31 +365,23 @@ function drawWebLines(L) {
                 ctx.fill();
                 ctx.restore();
 
+                connectedNodes.add(i);
+                connectedNodes.add(j);
                 conn++;
             }
         }
     }
 
-    // Pass 2: Glow dots at connected nodes
-    noStroke();
+    // Pass 2: Glow dots at connected nodes (using connectedSet from pass 1)
     ctx.save();
-    for (let i = 0; i < tiles.length; i++) {
-        let t = tiles[i];
-        // Check if this tile has any connections
-        let hasConn = false;
-        for (let j = 0; j < tiles.length && !hasConn; j++) {
-            if (i === j) continue;
-            let dx = t.x - tiles[j].x, dy = t.y - tiles[j].y;
-            if (dx*dx + dy*dy < maxDist*maxDist) hasConn = true;
-        }
-        if (!hasConn) continue;
-
-        let c = getImageColor(t.x, t.y);
-        let glowSize = 2 + sin(fn * 0.05 + i * 0.8) * 1;
-        ctx.globalAlpha = 0.3 + 0.15 * sin(fn * 0.06 + i);
-        ctx.fillStyle = 'rgba(' + floor(red(c)) + ',' + floor(green(c)) + ',' + floor(blue(c)) + ',1)';
+    for (let idx of connectedNodes) {
+        let t = tiles[idx];
+        getImageColorFast(t.x, t.y);
+        let glowSize = 2 + Math.sin(fn * 0.05 + idx * 0.8);
+        ctx.globalAlpha = 0.3 + 0.15 * Math.sin(fn * 0.06 + idx);
+        ctx.fillStyle = 'rgb(' + (_fastColorR|0) + ',' + (_fastColorG|0) + ',' + (_fastColorB|0) + ')';
         ctx.beginPath();
-        ctx.arc(t.x, t.y, glowSize, 0, TWO_PI);
+        ctx.arc(t.x, t.y, glowSize, 0, 6.2832);
         ctx.fill();
     }
     ctx.restore();
@@ -456,93 +449,106 @@ function drawTiles(L, frameNum) {
         }
     }
 
+    let ctx = drawingContext;
+    let baseAlpha = ctx.globalAlpha;
+    let hasEffects = scatterActive || springActive || seqActive ||
+                     L.effects.wave || L.effects.vortex || L.effects.rotate;
+    let tilesLen = tiles.length;
+    let invTilesLen = 1 / Math.max(1, tilesLen);
+
     noStroke();
-    for (let i = 0; i < tiles.length; i++) {
+    for (let i = 0; i < tilesLen; i++) {
         let t = tiles[i];
         let sz = baseSz * (t.size || 1);
 
         if (L.effects.pulse) {
-            sz *= sin(fn * 0.05 + i * 0.3) * 0.3 + 1;
+            sz *= Math.sin(fn * 0.05 + i * 0.3) * 0.3 + 1;
         }
 
         let tileAlpha = t.alpha !== undefined ? t.alpha : 1;
 
-        push();
+        // Use ctx.save/restore directly (faster than p5's push/pop)
+        ctx.save();
 
-        // Scatter: interpolate between scatter origin and home position
+        // Scatter
         if (scatterActive && L._scatterOrigins && i < L._scatterOrigins.length) {
             let sp = L.scatterProgress;
             let eased = sp * sp * (3 - 2 * sp);
             let orig = L._scatterOrigins[i];
-            let stagger = (i / tiles.length) * 0.4;
-            let localT = constrain((eased - stagger) / (1 - stagger), 0, 1);
-            let lx = lerp(t.x, orig.x, localT);
-            let ly = lerp(t.y, orig.y, localT);
-            translate(lx, ly);
-            let scaleF = lerp(1, 0.3, localT);
-            scale(scaleF); // scale BEFORE rotate
-            rotate(localT * (((i % 2) * 2) - 1) * PI * 1.5);
+            let stagger = i * invTilesLen * 0.4;
+            let localT = Math.max(0, Math.min(1, (eased - stagger) / (1 - stagger)));
+            let lx = t.x + (orig.x - t.x) * localT;
+            let ly = t.y + (orig.y - t.y) * localT;
+            ctx.translate(lx, ly);
+            let scaleF = 1 + (0.3 - 1) * localT;
+            ctx.scale(scaleF, scaleF);
+            ctx.rotate(localT * (((i & 1) * 2) - 1) * Math.PI * 1.5);
         } else {
-            translate(t.x, t.y);
+            ctx.translate(t.x, t.y);
         }
 
-        // Spring: apply spring offset
+        // Spring
         if (springActive && i < L._springState.length) {
             let s = L._springState[i];
-            translate(s.dx, s.dy);
+            ctx.translate(s.dx, s.dy);
         }
 
-        // Sequencer: fade-in with scale based on reveal order
+        // Sequencer
         if (seqActive && seqOrder) {
-            let revealT = seqOrder[i]; // 0..1 position in reveal order
-            let progress = L.sequencerProgress;
-            // Each tile appears when progress reaches its position
-            let tileReveal = constrain((progress - revealT * 0.8) / 0.2, 0, 1);
-            // Elastic ease-out
-            let elastic = tileReveal === 0 ? 0 : pow(2, -10 * tileReveal) * sin((tileReveal - 0.075) * (TWO_PI) / 0.3) + 1;
-            let s = elastic;
-            scale(s);
+            let tileReveal = Math.max(0, Math.min(1, (L.sequencerProgress - seqOrder[i] * 0.8) / 0.2));
+            let s = tileReveal === 0 ? 0 : Math.pow(2, -10 * tileReveal) * Math.sin((tileReveal - 0.075) * 6.2832 / 0.3) + 1;
+            ctx.scale(s, s);
             tileAlpha *= s;
-            if (s < 0.01) { pop(); continue; } // skip invisible tiles
+            if (s < 0.01) { ctx.restore(); continue; }
         }
 
         if (L.effects.wave) {
-            translate(sin(fn * 0.03 + t.x * 0.008) * 8, cos(fn * 0.025 + t.y * 0.008) * 6);
+            ctx.translate(Math.sin(fn * 0.03 + t.x * 0.008) * 8, Math.cos(fn * 0.025 + t.y * 0.008) * 6);
         }
 
         if (L.effects.vortex) {
-            let dx = t.x - width / 2;
-            let dy = t.y - height / 2;
-            let dist = sqrt(dx * dx + dy * dy);
+            let dx = t.x - width * 0.5, dy = t.y - height * 0.5;
+            let dist = Math.sqrt(dx * dx + dy * dy);
             let ang = fn * 0.01 + dist * 0.005;
-            let r = sin(fn * 0.02) * min(dist * 0.08, 20);
-            translate(cos(ang) * r, sin(ang) * r);
+            let r = Math.sin(fn * 0.02) * Math.min(dist * 0.08, 20);
+            ctx.translate(Math.cos(ang) * r, Math.sin(ang) * r);
         }
 
         if (L.effects.rotate) {
-            randomSeed(i);
-            rotate(random(-0.4, 0.4));
+            // Deterministic per-tile rotation without randomSeed (expensive)
+            let rot = ((i * 73856093) & 0xFFFF) / 65535.0 * 0.8 - 0.4;
+            ctx.rotate(rot);
         }
 
-        if (tileAlpha < 1) drawingContext.globalAlpha *= tileAlpha;
+        if (tileAlpha < 1) ctx.globalAlpha = baseAlpha * tileAlpha;
 
-        let c = getImageColor(t.x, t.y);
+        getImageColorFast(t.x, t.y);
 
-        // Voronoi is drawn as a batch after the loop, skip individual tiles here
         if (shape === 'voronoi') {
-            pop();
+            ctx.restore();
             continue;
         }
 
-        switch (shape) {
-            case 'circle': drawTileCircle(sz, c); break;
-            case 'char': drawTileChar(sz, c, charSource, i, L); break;
-            case 'adaptive': drawTileAdaptive(sz, c, t); break;
-            case 'cross': drawTileCross(sz, c); break;
-            default: drawTileRect(sz, c); break;
+        // Fast path: for simple rect shape, draw directly via ctx (skip p5 overhead)
+        if (shape === 'rect') {
+            if (img) {
+                ctx.drawImage(img.canvas || img.elt, -sz * 0.5, -sz * 0.5, sz, sz);
+            } else {
+                ctx.fillStyle = 'rgb(' + (_fastColorR|0) + ',' + (_fastColorG|0) + ',' + (_fastColorB|0) + ')';
+                ctx.fillRect(-sz * 0.5, -sz * 0.5, sz, sz);
+            }
+        } else {
+            // Other shapes use p5 helpers (need color object)
+            let c = color(_fastColorR, _fastColorG, _fastColorB);
+            switch (shape) {
+                case 'circle': drawTileCircle(sz, c); break;
+                case 'char': drawTileChar(sz, c, charSource, i, L); break;
+                case 'adaptive': drawTileAdaptive(sz, c, t); break;
+                case 'cross': drawTileCross(sz, c); break;
+            }
         }
 
-        pop();
+        ctx.restore();
     }
 
     // Voronoi: draw all cells as a batch
@@ -1056,12 +1062,40 @@ function updateImageFilterCache() {
     _imgFilter = activeFilter ? activeFilter.dataset.filter : 'none';
 }
 
+// Fast color return — reuse array instead of creating p5.Color objects
+let _fastColorR = 200, _fastColorG = 200, _fastColorB = 200;
+
+function getImageColorFast(x, y) {
+    if (!img || !img.pixels || img.pixels.length === 0) {
+        _fastColorR = _fastColorG = _fastColorB = 200;
+        return;
+    }
+    let ax = x - _currentLayerOffsetX;
+    let ay = y - _currentLayerOffsetY;
+    let ix = Math.max(0, Math.min(Math.floor(ax / width * img.width), img.width - 1));
+    let iy = Math.max(0, Math.min(Math.floor(ay / height * img.height), img.height - 1));
+    let idx = (iy * img.width + ix) * 4;
+    let r = img.pixels[idx], g = img.pixels[idx + 1], b = img.pixels[idx + 2];
+
+    // Apply filters inline (avoid function call overhead)
+    if (_imgBrightness !== 100) { let f = _imgBrightness / 100; r *= f; g *= f; b *= f; }
+    if (_imgContrast !== 100) { let f = _imgContrast / 100; let ic = 128 * (1 - f); r = r * f + ic; g = g * f + ic; b = b * f + ic; }
+    if (_imgSaturate !== 100) { let s = _imgSaturate / 100; let gray = 0.299 * r + 0.587 * g + 0.114 * b; r = gray + s * (r - gray); g = gray + s * (g - gray); b = gray + s * (b - gray); }
+    if (_imgFilter === 'grayscale') { let gray = 0.299 * r + 0.587 * g + 0.114 * b; r = g = b = gray; }
+    else if (_imgFilter === 'invert') { r = 255 - r; g = 255 - g; b = 255 - b; }
+
+    _fastColorR = Math.max(0, Math.min(255, r));
+    _fastColorG = Math.max(0, Math.min(255, g));
+    _fastColorB = Math.max(0, Math.min(255, b));
+}
+
+// Legacy wrapper for code that still uses color() return
 function getImageColor(x, y) {
     if (!img || !img.pixels || img.pixels.length === 0) return color(200);
     let ax = x - _currentLayerOffsetX;
     let ay = y - _currentLayerOffsetY;
-    let ix = constrain(floor(ax / width * img.width), 0, img.width - 1);
-    let iy = constrain(floor(ay / height * img.height), 0, img.height - 1);
+    let ix = Math.max(0, Math.min(Math.floor(ax / width * img.width), img.width - 1));
+    let iy = Math.max(0, Math.min(Math.floor(ay / height * img.height), img.height - 1));
     let idx = (iy * img.width + ix) * 4;
     let r = img.pixels[idx], g = img.pixels[idx + 1], b = img.pixels[idx + 2];
 
