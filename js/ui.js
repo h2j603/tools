@@ -262,35 +262,45 @@ function updateThemeIcon() {
     el.textContent = isDark ? '☀' : '☾';
 }
 
-function bindGlobalEvents() {
-    document.getElementById('convertBtn').addEventListener('click', convertAll);
-    document.getElementById('themeToggle').addEventListener('click', toggleTheme);
-    document.getElementById('resizeBtn').addEventListener('click', updateCanvas);
-    document.getElementById('saveBtn').addEventListener('click', saveImage);
-    document.getElementById('saveTransBtn').addEventListener('click', saveTransparentImage);
-    document.getElementById('exportVideoBtn').addEventListener('click', exportVideo);
-    document.getElementById('previewBtn').addEventListener('click', enterFullscreen);
-    document.getElementById('closeFullscreen').addEventListener('click', exitFullscreen);
-    document.getElementById('imageInput').addEventListener('change', handleImage);
-    document.getElementById('addLayerBtn').addEventListener('click', () => addLayer());
-    document.getElementById('addMorphStepBtn').addEventListener('click', addMorphStep);
+// Safe event binding — never crashes on missing elements
+function on(id, evt, fn) {
+    let el = document.getElementById(id);
+    if (el) el.addEventListener(evt, fn);
+}
 
-    document.getElementById('bgColor').addEventListener('input', markGradientDirty);
-    document.getElementById('bgColor2').addEventListener('input', markGradientDirty);
-    document.getElementById('gradAngle').addEventListener('input', () => {
-        gradAngle = parseInt(document.getElementById('gradAngle').value);
-        document.getElementById('gradAngleVal').textContent = gradAngle;
+function bindGlobalEvents() {
+    on('convertBtn', 'click', convertAll);
+    on('themeToggle', 'click', toggleTheme);
+    on('resizeBtn', 'click', updateCanvas);
+    on('saveBtn', 'click', saveImage);
+    on('saveTransBtn', 'click', saveTransparentImage);
+    on('exportVideoBtn', 'click', exportVideo);
+    on('previewBtn', 'click', enterFullscreen);
+    on('closeFullscreen', 'click', exitFullscreen);
+    on('imageInput', 'change', handleImage);
+    on('addLayerBtn', 'click', () => addLayer());
+    on('addMorphStepBtn', 'click', addMorphStep);
+
+    on('bgColor', 'input', markGradientDirty);
+    on('bgColor2', 'input', markGradientDirty);
+    on('gradAngle', 'input', () => {
+        let el = document.getElementById('gradAngle');
+        if (el) { gradAngle = parseInt(el.value); }
+        let vel = document.getElementById('gradAngleVal');
+        if (vel) vel.textContent = gradAngle;
         markGradientDirty();
     });
-    document.getElementById('noiseAmount').addEventListener('input', () => {
-        noiseAmount = parseInt(document.getElementById('noiseAmount').value);
-        document.getElementById('noiseAmountVal').textContent = noiseAmount;
+    on('noiseAmount', 'input', () => {
+        let el = document.getElementById('noiseAmount');
+        if (el) { noiseAmount = parseInt(el.value); }
+        let vel = document.getElementById('noiseAmountVal');
+        if (vel) vel.textContent = noiseAmount;
         generateNoiseBuffer();
     });
 
-    document.getElementById('gradNone').addEventListener('click', () => { gradientType = 'none'; updateGradBtns(); markGradientDirty(); });
-    document.getElementById('gradLinear').addEventListener('click', () => { gradientType = 'linear'; updateGradBtns(); markGradientDirty(); });
-    document.getElementById('gradRadial').addEventListener('click', () => { gradientType = 'radial'; updateGradBtns(); markGradientDirty(); });
+    on('gradNone', 'click', () => { gradientType = 'none'; updateGradBtns(); markGradientDirty(); });
+    on('gradLinear', 'click', () => { gradientType = 'linear'; updateGradBtns(); markGradientDirty(); });
+    on('gradRadial', 'click', () => { gradientType = 'radial'; updateGradBtns(); markGradientDirty(); });
 
     // Canvas presets
     document.querySelectorAll('.preset-btn').forEach(btn => {
@@ -319,16 +329,13 @@ function bindGlobalEvents() {
         });
     });
 
-    // Shortcut modal
-    document.getElementById('shortcutHelpBtn').addEventListener('click', () => {
-        document.getElementById('shortcutModal').classList.remove('hidden');
-    });
-    document.getElementById('closeShortcutModal').addEventListener('click', () => {
-        document.getElementById('shortcutModal').classList.add('hidden');
-    });
-    document.getElementById('shortcutModal').addEventListener('click', (e) => {
-        if (e.target.id === 'shortcutModal') document.getElementById('shortcutModal').classList.add('hidden');
-    });
+    // Shortcut modal (null-safe)
+    let helpBtn = document.getElementById('shortcutHelpBtn');
+    let helpModal = document.getElementById('shortcutModal');
+    let helpClose = document.getElementById('closeShortcutModal');
+    if (helpBtn && helpModal) helpBtn.addEventListener('click', () => helpModal.classList.remove('hidden'));
+    if (helpClose && helpModal) helpClose.addEventListener('click', () => helpModal.classList.add('hidden'));
+    if (helpModal) helpModal.addEventListener('click', (e) => { if (e.target === helpModal) helpModal.classList.add('hidden'); });
 }
 
 function bindLayerSettingsEvents() {
