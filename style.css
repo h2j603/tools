@@ -74,9 +74,11 @@ body, html {
 }
 
 #canvas-wrap canvas {
+    display: block;
+    width: auto !important;
+    height: auto !important;
     max-width: 100%;
     max-height: 100%;
-    object-fit: contain;
     border-radius: 2px;
 }
 
@@ -499,9 +501,10 @@ input[type="range"]::-moz-range-thumb {
 .toggle-btn:hover { border-color: var(--border-hover); color: var(--text-2); }
 
 .toggle-btn.active {
-    background: var(--accent-dim);
-    color: var(--accent);
-    border-color: rgba(108,138,255,0.3);
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    box-shadow: 0 0 8px rgba(108,138,255,0.3);
 }
 
 /* ─── Color Input ─── */
@@ -985,6 +988,85 @@ kbd {
 
 .morph-step-card .toggle-group { gap: 3px; }
 .morph-step-card .toggle-btn { padding: 4px 3px; font-size: 8px; }
+
+/* ─── Light Mode ─── */
+:root.light,
+:root[data-theme="light"] {
+    --bg-0: #f5f5f7;
+    --bg-1: #ebebef;
+    --bg-2: #ffffff;
+    --bg-3: #e0e0e5;
+    --border: #d0d0d6;
+    --border-hover: #b0b0b8;
+    --text-1: #1a1a1e;
+    --text-2: #555560;
+    --text-3: #888892;
+    --accent: #4466dd;
+    --accent-dim: #e8ecfa;
+    --danger: #dd3344;
+    --rec: #dd2233;
+    --active: #333340;
+    --success: #22aa66;
+}
+
+:root.light body,
+:root[data-theme="light"] body {
+    background: var(--bg-0);
+}
+
+:root.light #canvas-area,
+:root[data-theme="light"] #canvas-area {
+    background: #e8e8ec;
+}
+
+:root.light #fullscreen-view,
+:root[data-theme="light"] #fullscreen-view {
+    background: #e8e8ec;
+}
+
+:root.light .toggle-btn.active,
+:root[data-theme="light"] .toggle-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+
+:root.light .btn-action.primary,
+:root[data-theme="light"] .btn-action.primary {
+    background: var(--accent);
+    color: #fff;
+}
+
+:root.light .morph-step-card,
+:root[data-theme="light"] .morph-step-card {
+    background: var(--bg-1);
+}
+
+:root.light .layer-item.active,
+:root[data-theme="light"] .layer-item.active {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+}
+
+@media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+        --bg-0: #f5f5f7;
+        --bg-1: #ebebef;
+        --bg-2: #ffffff;
+        --bg-3: #e0e0e5;
+        --border: #d0d0d6;
+        --border-hover: #b0b0b8;
+        --text-1: #1a1a1e;
+        --text-2: #555560;
+        --text-3: #888892;
+        --accent: #4466dd;
+        --accent-dim: #e8ecfa;
+        --danger: #dd3344;
+        --rec: #dd2233;
+        --active: #333340;
+        --success: #22aa66;
+    }
+}
 
 /* ─── Reduced Motion ─── */
 @media (prefers-reduced-motion: reduce) {

@@ -236,8 +236,35 @@ function addMorphStep() {
     renderMorphStepCards(L);
 }
 
+// ── Theme Toggle ──
+function initTheme() {
+    let saved = localStorage.getItem('tmg-theme');
+    if (saved) {
+        document.documentElement.setAttribute('data-theme', saved);
+    }
+    updateThemeIcon();
+}
+
+function toggleTheme() {
+    let current = document.documentElement.getAttribute('data-theme');
+    let isDark = !current || current === 'dark';
+    let next = isDark ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('tmg-theme', next);
+    updateThemeIcon();
+}
+
+function updateThemeIcon() {
+    let el = document.getElementById('themeIcon');
+    if (!el) return;
+    let theme = document.documentElement.getAttribute('data-theme');
+    let isDark = !theme || theme === 'dark';
+    el.textContent = isDark ? '☀' : '☾';
+}
+
 function bindGlobalEvents() {
     document.getElementById('convertBtn').addEventListener('click', convertAll);
+    document.getElementById('themeToggle').addEventListener('click', toggleTheme);
     document.getElementById('resizeBtn').addEventListener('click', updateCanvas);
     document.getElementById('saveBtn').addEventListener('click', saveImage);
     document.getElementById('saveTransBtn').addEventListener('click', saveTransparentImage);

@@ -26,6 +26,7 @@ function setup() {
     // Use 1x for live preview (performance), export will temporarily bump to devicePixelRatio
     pixelDensity(1);
 
+    initTheme();
     checkFontAndInit();
     bindGlobalEvents();
     bindLayerSettingsEvents();
