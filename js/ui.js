@@ -286,9 +286,9 @@ function bindLayerSettingsEvents() {
                 L.morphDirection = 1;
             }
             if (fx === 'scatter' && L.effects.scatter) {
-                L.scatterProgress = 0;
-                L.scatterDirection = 1;
-                L._scatterOrigins = null; // regenerate scatter origins
+                L.scatterProgress = 1; // start scattered
+                L.scatterDirection = -1; // gather inward first
+                L._scatterOrigins = null;
             }
         });
     });

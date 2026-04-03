@@ -230,8 +230,8 @@ function updateMorphedTiles(L) {
         // Smooth arc
         let curve = sin(eased * PI) * 12;
         let angle = atan2(t2.y - t1.y, t2.x - t1.x) + HALF_PI;
-        mx += cos(angle) * curve * sin(pi * 0.1);
-        my += sin(angle) * curve * sin(pi * 0.1);
+        mx += cos(angle) * curve * sin(PI * 0.1);
+        my += sin(angle) * curve * sin(PI * 0.1);
 
         // Extra tiles scale smoothly
         let sizeScale = 1;
@@ -496,6 +496,20 @@ function draw3DRotatedTiles(L, frameNum) {
     let focalLen = width * 1.2;
     let maxDim = min(width, height);
 
+    // Scatter support in 3D
+    let scatterActive3D = L.effects.scatter && L.scatterProgress > 0.001;
+    if (scatterActive3D && !L._scatterOrigins) {
+        L._scatterOrigins = [];
+        for (let i = 0; i < tiles.length; i++) {
+            let angle = ((i * 137.508) % 360) * (PI / 180);
+            let dist = maxDim * (0.8 + ((i * 73) % 100) / 100 * 0.7);
+            L._scatterOrigins.push({
+                x: width / 2 + cos(angle) * dist,
+                y: height / 2 + sin(angle) * dist
+            });
+        }
+    }
+
     // Global rotation (gentle base)
     let baseRotY = sin(fn * 0.012) * 0.4;
     let baseRotX = sin(fn * 0.008 + 1) * 0.15;
@@ -580,9 +594,24 @@ function draw3DRotatedTiles(L, frameNum) {
         let tileAlpha = (t.alpha !== undefined ? t.alpha : 1) * depthAlpha;
 
         push();
-        translate(p.sx, p.sy);
 
-        // Per-tile subtle rotation
+        // Scatter in 3D mode
+        if (scatterActive3D && L._scatterOrigins && p.origIdx < L._scatterOrigins.length) {
+            let sp = L.scatterProgress;
+            let eased = sp * sp * (3 - 2 * sp);
+            let stagger = (p.origIdx / tiles.length) * 0.4;
+            let localT = constrain((eased - stagger) / (1 - stagger), 0, 1);
+            let orig = L._scatterOrigins[p.origIdx];
+            let lx = lerp(p.sx, orig.x, localT);
+            let ly = lerp(p.sy, orig.y, localT);
+            translate(lx, ly);
+            rotate(localT * (((p.origIdx % 2) * 2) - 1) * PI * 1.5);
+            let sf = lerp(1, 0.3, localT);
+            scale(sf);
+        } else {
+            translate(p.sx, p.sy);
+        }
+
         rotate(p.tileRot);
 
         if (L.effects.wave) translate(sin(fn * 0.03 + t.x * 0.008) * 5, 0);
