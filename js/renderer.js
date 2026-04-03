@@ -96,30 +96,41 @@ function drawLayers(frameNum) {
         let L = layers[i];
         if (!L.visible || L.currentTiles.length === 0) continue;
 
-        // Morph update (multi-step with hold/pause)
+        // Morph update (multi-step with per-step hold)
         if (L.effects.morph && L.morphSteps && L.morphSteps.length > 1) {
             if (L.morphHolding) {
+                // Holding at destination — keep progress at 1.0 (stay at target)
                 L.morphHoldTimer -= 1/60;
-                if (L.morphHoldTimer <= 0) L.morphHolding = false;
+                if (L.morphHoldTimer <= 0) {
+                    L.morphHolding = false;
+                    // NOW advance to next step
+                    L.morphProgress = 0;
+                    L.morphStepIdx++;
+                    if (L.morphStepIdx >= L.morphSteps.length - 1) L.morphStepIdx = 0;
+                    L._morphPairs = null;
+                }
             } else {
                 let ppf = 1 / (L.morphDuration * 60);
                 L.morphProgress += ppf;
                 if (L.morphProgress >= 1) {
-                    L.morphProgress = 0;
-                    L.morphStepIdx++;
-                    // Cycle through all steps: 0→1→2→...→N→N-1→...→0→1→...
-                    if (L.morphStepIdx >= L.morphSteps.length - 1) L.morphStepIdx = 0;
-                    // Rebuild morph pairs for new step pair
-                    L._morphPairs = null;
-                    if (L.morphHold > 0) { L.morphHolding = true; L.morphHoldTimer = L.morphHold; }
+                    L.morphProgress = 1; // clamp at destination
+                    if (L.morphHold > 0) {
+                        L.morphHolding = true;
+                        L.morphHoldTimer = L.morphHold;
+                    } else {
+                        // No hold — advance immediately
+                        L.morphProgress = 0;
+                        L.morphStepIdx++;
+                        if (L.morphStepIdx >= L.morphSteps.length - 1) L.morphStepIdx = 0;
+                        L._morphPairs = null;
+                    }
                 }
             }
-            // Set tiles1/tiles2 BEFORE updateMorphedTiles (prevents null-frame)
+            // Set tiles1/tiles2 for current step
             let fromIdx = L.morphStepIdx;
             let toIdx = (L.morphStepIdx + 1) % L.morphSteps.length;
             L.tiles1 = L.morphSteps[fromIdx];
             L.tiles2 = L.morphSteps[toIdx];
-            // Rebuild morphPairs if invalidated (uses current tiles1/tiles2)
             if (!L._morphPairs) {
                 L._morphPairs = buildSpatialMorphMap(L.tiles1, L.tiles2);
             }
