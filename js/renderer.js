@@ -362,25 +362,26 @@ function drawTiles(L, frameNum) {
 
         let c = getImageColor(t.x, t.y);
 
+        // Voronoi is drawn as a batch after the loop, skip individual tiles here
+        if (shape === 'voronoi') {
+            pop();
+            continue;
+        }
+
         switch (shape) {
-            case 'circle':
-                drawTileCircle(sz, c);
-                break;
-            case 'char':
-                drawTileChar(sz, c, charSource, i, L);
-                break;
-            case 'adaptive':
-                drawTileAdaptive(sz, c, t);
-                break;
-            case 'cross':
-                drawTileCross(sz, c);
-                break;
-            default: // rect
-                drawTileRect(sz, c);
-                break;
+            case 'circle': drawTileCircle(sz, c); break;
+            case 'char': drawTileChar(sz, c, charSource, i, L); break;
+            case 'adaptive': drawTileAdaptive(sz, c, t); break;
+            case 'cross': drawTileCross(sz, c); break;
+            default: drawTileRect(sz, c); break;
         }
 
         pop();
+    }
+
+    // Voronoi: draw all cells as a batch
+    if (shape === 'voronoi' && tiles.length > 0) {
+        drawVoronoiTiles(L, tiles, baseSz, fn);
     }
 }
 
@@ -483,6 +484,172 @@ function drawTileCross(sz, c) {
         rect(-arm / 2, -half, arm, sz);
         rect(-half, -arm / 2, sz, arm);
     }
+}
+
+// ═══════════════════════════════════
+// Voronoi Tile Shape
+// Each tile becomes an irregular polygon cell
+// Computed via nearest-neighbor Voronoi from tile positions
+// ═══════════════════════════════════
+
+function drawVoronoiTiles(L, tiles, baseSz, frameNum) {
+    // Build Voronoi cell polygons (cached)
+    if (!L._voronoiCells || L._voronoiCells.length !== tiles.length) {
+        L._voronoiCells = computeVoronoiCells(tiles, width, height);
+    }
+
+    let fn = frameNum || frameCount;
+
+    for (let i = 0; i < tiles.length; i++) {
+        let t = tiles[i];
+        let cell = L._voronoiCells[i];
+        if (!cell || cell.length < 3) continue;
+
+        let tileAlpha = t.alpha !== undefined ? t.alpha : 1;
+        let c = getImageColor(t.x, t.y);
+
+        push();
+
+        // Apply effects to cell center
+        let ox = 0, oy = 0;
+        if (L.effects.wave) {
+            ox = sin(fn * 0.03 + t.x * 0.008) * 8;
+            oy = cos(fn * 0.025 + t.y * 0.008) * 6;
+        }
+        if (L.effects.vortex) {
+            let dx = t.x - width / 2;
+            let dy = t.y - height / 2;
+            let dist = sqrt(dx * dx + dy * dy);
+            let ang = fn * 0.01 + dist * 0.005;
+            let r = sin(fn * 0.02) * min(dist * 0.08, 20);
+            ox += cos(ang) * r;
+            oy += sin(ang) * r;
+        }
+
+        if (tileAlpha < 1) drawingContext.globalAlpha = (L.opacity / 100) * tileAlpha;
+
+        // Draw the Voronoi cell as a clipped polygon
+        drawingContext.save();
+        drawingContext.beginPath();
+        drawingContext.moveTo(cell[0].x + ox, cell[0].y + oy);
+        for (let j = 1; j < cell.length; j++) {
+            drawingContext.lineTo(cell[j].x + ox, cell[j].y + oy);
+        }
+        drawingContext.closePath();
+
+        if (img) {
+            drawingContext.clip();
+            // Draw image for the cell bounding area
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            for (let p of cell) {
+                if (p.x < minX) minX = p.x;
+                if (p.x > maxX) maxX = p.x;
+                if (p.y < minY) minY = p.y;
+                if (p.y > maxY) maxY = p.y;
+            }
+            minX += ox; maxX += ox; minY += oy; maxY += oy;
+            // Map cell bounds to image
+            let iw = img.width, ih = img.height;
+            let sx = (minX / width) * iw;
+            let sy = (minY / height) * ih;
+            let sw = ((maxX - minX) / width) * iw;
+            let sh = ((maxY - minY) / height) * ih;
+            drawingContext.drawImage(img.canvas || img.elt, sx, sy, sw, sh, minX, minY, maxX - minX, maxY - minY);
+        } else {
+            drawingContext.fillStyle = 'rgb(' + red(c) + ',' + green(c) + ',' + blue(c) + ')';
+            drawingContext.fill();
+        }
+
+        // Optional: draw cell border
+        drawingContext.strokeStyle = 'rgba(255,255,255,0.06)';
+        drawingContext.lineWidth = 0.5;
+        drawingContext.stroke();
+
+        drawingContext.restore();
+        pop();
+    }
+}
+
+// Compute approximate Voronoi cells using nearest-neighbor scan
+// For each tile point, find the polygon formed by midpoints to neighbors
+function computeVoronoiCells(tiles, w, h) {
+    let cells = [];
+    let n = tiles.length;
+
+    // For performance: use a simpler approach
+    // Sample boundary points and assign to nearest tile
+    // Then compute convex hull of assigned points per tile
+
+    // Faster approach: for each tile, find nearby tiles and compute
+    // perpendicular bisector intersections to form the cell polygon
+    for (let i = 0; i < n; i++) {
+        let t = tiles[i];
+
+        // Find nearest neighbors (limit to closest ~8 for performance)
+        let neighbors = [];
+        for (let j = 0; j < n; j++) {
+            if (i === j) continue;
+            let dx = tiles[j].x - t.x;
+            let dy = tiles[j].y - t.y;
+            neighbors.push({ idx: j, dist: dx * dx + dy * dy, dx: dx, dy: dy });
+        }
+        neighbors.sort((a, b) => a.dist - b.dist);
+        neighbors = neighbors.slice(0, min(12, neighbors.length));
+
+        // Create cell polygon by intersecting half-planes
+        // Start with a large bounding rect, clip by each bisector
+        let poly = [
+            { x: max(0, t.x - w * 0.5), y: max(0, t.y - h * 0.5) },
+            { x: min(w, t.x + w * 0.5), y: max(0, t.y - h * 0.5) },
+            { x: min(w, t.x + w * 0.5), y: min(h, t.y + h * 0.5) },
+            { x: max(0, t.x - w * 0.5), y: min(h, t.y + h * 0.5) }
+        ];
+
+        for (let nb of neighbors) {
+            let other = tiles[nb.idx];
+            // Bisector: midpoint and perpendicular direction
+            let mx = (t.x + other.x) / 2;
+            let my = (t.y + other.y) / 2;
+            // Normal pointing away from neighbor (toward t)
+            let nx = t.x - other.x;
+            let ny = t.y - other.y;
+            // Clip polygon by half-plane: keep points where dot(p-mid, normal) >= 0
+            poly = clipPolygon(poly, mx, my, nx, ny);
+            if (poly.length < 3) break;
+        }
+
+        cells.push(poly);
+    }
+
+    return cells;
+}
+
+// Sutherland-Hodgman polygon clipping by a half-plane
+function clipPolygon(poly, mx, my, nx, ny) {
+    if (poly.length === 0) return poly;
+    let out = [];
+    let len = poly.length;
+
+    for (let i = 0; i < len; i++) {
+        let curr = poly[i];
+        let next = poly[(i + 1) % len];
+
+        let dc = (curr.x - mx) * nx + (curr.y - my) * ny;
+        let dn = (next.x - mx) * nx + (next.y - my) * ny;
+
+        if (dc >= 0) out.push(curr);
+
+        if ((dc >= 0 && dn < 0) || (dc < 0 && dn >= 0)) {
+            // Edge crosses the boundary — find intersection
+            let t = dc / (dc - dn);
+            out.push({
+                x: curr.x + t * (next.x - curr.x),
+                y: curr.y + t * (next.y - curr.y)
+            });
+        }
+    }
+
+    return out;
 }
 
 // ═══════════════════════════════════
