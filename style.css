@@ -103,6 +103,7 @@ body, html {
 #controls {
     flex: 1 1 0;
     min-height: 0;
+    overflow: hidden;
     background: var(--bg-1);
     display: flex;
     flex-direction: column;
@@ -111,7 +112,8 @@ body, html {
 }
 
 .scroll-container {
-    flex: 1;
+    flex: 1 1 0;
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     padding: 14px;
@@ -135,6 +137,7 @@ body, html {
     padding-bottom: 12px;
     margin-bottom: 2px;
     border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
 }
 
 .logo-group {
@@ -177,6 +180,7 @@ body, html {
     display: flex;
     flex-direction: column;
     gap: 9px;
+    flex-shrink: 0;
 }
 
 .section-header {
@@ -576,6 +580,7 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 3px; }
     text-align: center;
     padding: 6px 0;
     letter-spacing: 0.3px;
+    flex-shrink: 0;
 }
 
 .status-msg.success { color: var(--success); }
@@ -584,6 +589,7 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 3px; }
 .safe-bottom {
     height: env(safe-area-inset-bottom);
     min-height: 8px;
+    flex-shrink: 0;
 }
 
 input[type="file"] { display: none; }
