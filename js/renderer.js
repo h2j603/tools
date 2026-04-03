@@ -38,11 +38,13 @@ function drawBackground() {
     }
 
     if (noiseAmount > 0 && noiseBuffer) {
-        push();
-        blendMode(ADD);
-        tint(255, noiseAmount * 2.55);
-        image(noiseBuffer, 0, 0);
-        pop();
+        // Use globalAlpha instead of tint() (tint is very slow in p5.js)
+        let ctx = drawingContext;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = noiseAmount / 100;
+        ctx.drawImage(noiseBuffer.canvas || noiseBuffer.elt, 0, 0);
+        ctx.restore();
     }
 }
 

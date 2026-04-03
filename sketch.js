@@ -83,8 +83,22 @@ function fitCanvasToPreview() {
 
 // ── p5.js Draw Loop ──
 function draw() {
-    if (isExporting === true) return; // skip draw only for old frame-by-frame mode
+    if (isExporting === true) return;
     drawFrame(frameCount);
+
+    // Auto noLoop when no animations are active (saves CPU/battery)
+    let anyAnim = layers.some(L => L.visible && (
+        L.effects.morph || L.effects.pulse || L.effects.wave ||
+        L.effects.vortex || L.effects.rotate3d || L.effects.scatter ||
+        L.effects.sequencer || L.effects.spring));
+    if (!anyAnim && isExporting !== 'recording') {
+        noLoop();
+    }
+}
+
+// Call this when any setting changes to restart draw loop
+function requestRedraw() {
+    loop();
 }
 
 // Refit on window resize

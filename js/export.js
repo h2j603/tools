@@ -113,6 +113,9 @@ async function exportVideo() {
         if (L.effects.spring) { L._springState = null; }
     }
 
+    // Limit frame rate during recording to reduce GPU load
+    frameRate(30);
+
     // Upscale for hi-res
     if (expScale > 1) {
         pixelDensity(expScale);
@@ -125,6 +128,13 @@ async function exportVideo() {
     let cnv = document.querySelector('#canvas-wrap canvas') ||
               document.querySelector('#fullscreen-canvas-holder canvas');
     if (!cnv) { finishExport(savedOffset, savedZoom, btn, progBar, expScale); return; }
+
+    // Check captureStream support (iOS Safari may not support it)
+    if (!cnv.captureStream) {
+        finishExport(savedOffset, savedZoom, btn, progBar, expScale);
+        updateStatus('이 브라우저에서 영상 녹화를 지원하지 않습니다. PNG 저장을 이용하세요.', 'error');
+        return;
+    }
 
     // Use captureStream with auto fps (browser handles timing)
     let stream, recorder;
@@ -218,6 +228,7 @@ async function exportVideo() {
 
 function finishExport(savedOffset, savedZoom, btn, progBar, restoreScale) {
     isExporting = false;
+    frameRate(60); // restore normal frame rate
     if (exportTimer) { clearTimeout(exportTimer); exportTimer = null; }
     offset = savedOffset;
     zoom = savedZoom;

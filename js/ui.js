@@ -8,7 +8,7 @@ function debounce(fn, ms) {
     return function (...args) { clearTimeout(timer); timer = setTimeout(() => fn.apply(this, args), ms); };
 }
 
-const debouncedGenerate = debounce(function (L) { generateLayerTiles(L); }, 150);
+const debouncedGenerate = debounce(function (L) { generateLayerTiles(L); requestRedraw(); }, 150);
 
 // ── Layer Management ──
 
@@ -456,9 +456,9 @@ function bindLayerSettingsEvents() {
                 L.sequencerProgress = 0;
             }
             if (fx === 'spring' && L.effects.spring) {
-                // Initialize spring state for each tile
                 L._springState = null;
             }
+            requestRedraw();
         });
     });
 }
