@@ -41,7 +41,7 @@ body, html {
 }
 
 /* ═══════════════════════════════════
-   APP LAYOUT
+   APP LAYOUT — Mobile First
    Mobile: column (canvas top / controls bottom)
    Desktop: row (controls left / canvas right)
    ═══════════════════════════════════ */
@@ -49,12 +49,14 @@ body, html {
     height: 100dvh;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
 /* ─── Live Canvas Area ─── */
 #canvas-area {
-    flex: 1 1 0;
-    min-height: 0;
+    flex: 0 0 35dvh;
+    min-height: 150px;
+    max-height: 45dvh;
     background: var(--bg-0);
     display: flex;
     align-items: center;
@@ -99,9 +101,8 @@ body, html {
 
 /* ─── Controls Panel ─── */
 #controls {
-    flex: 0 0 auto;
-    height: 50dvh;
-    max-height: 50dvh;
+    flex: 1 1 0;
+    min-height: 0;
     background: var(--bg-1);
     display: flex;
     flex-direction: column;
@@ -750,6 +751,8 @@ kbd {
     #canvas-area {
         flex: 1;
         height: 100dvh;
+        max-height: 100dvh;
+        min-height: unset;
         background-image: radial-gradient(circle at 50% 50%, rgba(108,138,255,0.02) 0%, transparent 60%);
     }
 
@@ -769,25 +772,79 @@ kbd {
    ═══════════════════════════════════ */
 @media (max-width: 767px) {
     #canvas-area {
-        flex: 0 0 40dvh;
-        min-height: 200px;
+        flex: 0 0 30dvh;
+        min-height: 120px;
+        max-height: 35dvh;
     }
 
     #controls {
         flex: 1 1 0;
-        height: auto;
-        max-height: none;
         min-height: 0;
     }
 
     .scroll-container {
-        padding: 12px;
-        gap: 5px;
+        padding: 10px;
+        gap: 4px;
     }
 
-    .layer-item .layer-actions {
-        opacity: 1;
+    .header { padding-bottom: 8px; }
+    .logo { font-size: 18px; }
+
+    .section { padding: 10px; gap: 7px; }
+    .section-header h2 { font-size: 9px; }
+
+    .field label { font-size: 8px; }
+
+    input[type="text"],
+    input[type="number"],
+    textarea,
+    select {
+        padding: 7px 8px;
+        font-size: 11px;
     }
+
+    textarea { min-height: 34px; }
+
+    .toggle-btn { padding: 6px 3px; font-size: 8px; }
+    .toggle-group { gap: 3px; }
+
+    .btn-action { padding: 8px 6px; font-size: 9px; }
+    .btn-action.primary { font-size: 10px; }
+    .btn-sm { padding: 7px 5px; font-size: 9px; flex: 0 0 44px; }
+
+    .row-2, .row-3 { gap: 6px; }
+
+    .canvas-presets { gap: 3px; }
+    .preset-btn { padding: 4px 2px; font-size: 7px; }
+
+    input[type="range"] { height: 22px; }
+    input[type="range"]::-webkit-slider-thumb { width: 12px; height: 12px; margin-top: -4.5px; }
+    input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; }
+
+    input[type="color"] { height: 28px; }
+
+    .morph-step-card { padding: 6px; gap: 4px; }
+    .morph-step-card textarea { min-height: 28px; padding: 5px 6px; font-size: 10px; }
+    .morph-step-card select { padding: 4px 20px 4px 6px; font-size: 9px; }
+    .morph-step-card .toggle-btn { padding: 3px 2px; font-size: 7px; }
+
+    .layer-item { padding: 6px 8px; gap: 6px; }
+    .layer-item .layer-name { font-size: 9px; }
+    .layer-item .layer-actions { opacity: 1; }
+    .layer-btn { width: 20px; height: 20px; font-size: 10px; }
+    .layer-vis-btn { width: 20px; height: 20px; font-size: 12px; }
+
+    .layer-list { max-height: 120px; }
+
+    .morph-step-list { max-height: 180px; }
+
+    .unit-label { font-size: 9px; padding-bottom: 8px; }
+    .status-msg { font-size: 8px; padding: 4px 0; }
+    .safe-bottom { min-height: 8px; }
+
+    .icon-btn { width: 24px; height: 24px; }
+
+    #canvas-info { font-size: 8px; padding: 3px 8px; bottom: 4px; }
 }
 
 /* ─── Morph Step Cards ─── */
