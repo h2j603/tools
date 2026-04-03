@@ -5,6 +5,7 @@
 
 let gradientBuffer = null;
 let gradientDirty = true;
+let bgImage = null; // background image
 
 // ── Background ──
 
@@ -20,11 +21,13 @@ function drawBackground() {
     let c1 = color(_bgColorEl.value);
     let c2 = color(_bgColor2El.value);
 
-    if (gradientType === 'none') {
+    if (gradientType === 'image' && bgImage) {
+        // Background image — stretch to fill canvas
+        image(bgImage, 0, 0, width, height);
+    } else if (gradientType === 'none') {
         background(c1);
-    } else {
+    } else if (gradientType === 'linear' || gradientType === 'radial') {
         if (gradientDirty || !gradientBuffer || gradientBuffer.width !== width) {
-            // Clean up old buffer to prevent memory leak
             if (gradientBuffer) gradientBuffer.remove();
             gradientBuffer = createGraphics(width, height);
             if (gradientType === 'linear') renderLinearGradient(gradientBuffer, c1, c2);

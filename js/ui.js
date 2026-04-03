@@ -301,6 +301,27 @@ function bindGlobalEvents() {
     on('gradNone', 'click', () => { gradientType = 'none'; updateGradBtns(); markGradientDirty(); });
     on('gradLinear', 'click', () => { gradientType = 'linear'; updateGradBtns(); markGradientDirty(); });
     on('gradRadial', 'click', () => { gradientType = 'radial'; updateGradBtns(); markGradientDirty(); });
+    on('gradImage', 'click', () => {
+        gradientType = 'image';
+        updateGradBtns();
+        let row = document.getElementById('bgImageRow');
+        if (row) row.style.display = 'flex';
+    });
+    on('bgImageInput', 'change', (e) => {
+        if (e.target.files.length === 0) return;
+        let url = URL.createObjectURL(e.target.files[0]);
+        bgImage = loadImage(url, () => {
+            URL.revokeObjectURL(url);
+            updateStatus('배경 이미지 로드 완료', 'success');
+        });
+    });
+    on('bgImageClear', 'click', () => {
+        bgImage = null;
+        gradientType = 'none';
+        updateGradBtns();
+        let row = document.getElementById('bgImageRow');
+        if (row) row.style.display = 'none';
+    });
 
     // Canvas presets
     document.querySelectorAll('.preset-btn').forEach(btn => {
@@ -443,12 +464,15 @@ function bindLayerSettingsEvents() {
 }
 
 function updateGradBtns() {
-    ['gradNone', 'gradLinear', 'gradRadial'].forEach(id => {
-        document.getElementById(id).classList.remove('active');
+    ['gradNone', 'gradLinear', 'gradRadial', 'gradImage'].forEach(id => {
+        let el = document.getElementById(id);
+        if (el) el.classList.remove('active');
     });
-    if (gradientType === 'none') document.getElementById('gradNone').classList.add('active');
-    else if (gradientType === 'linear') document.getElementById('gradLinear').classList.add('active');
-    else if (gradientType === 'radial') document.getElementById('gradRadial').classList.add('active');
+    let activeId = { none: 'gradNone', linear: 'gradLinear', radial: 'gradRadial', image: 'gradImage' }[gradientType];
+    if (activeId) { let el = document.getElementById(activeId); if (el) el.classList.add('active'); }
+    // Show/hide bg image upload row
+    let row = document.getElementById('bgImageRow');
+    if (row) row.style.display = gradientType === 'image' ? 'flex' : 'none';
 }
 
 // ── Actions ──
