@@ -82,22 +82,26 @@ function fitCanvasToPreview() {
 }
 
 // ── p5.js Draw Loop ──
+let _keepLoopUntil = 0; // timestamp — keep loop running until this time
+
 function draw() {
     if (isExporting === true) return;
     drawFrame(frameCount);
 
-    // Auto noLoop when no animations are active (saves CPU/battery)
+    // Auto noLoop when no animations are active AND no recent user interaction
     let anyAnim = layers.some(L => L.visible && (
         L.effects.morph || L.effects.pulse || L.effects.wave ||
         L.effects.vortex || L.effects.rotate3d || L.effects.scatter ||
         L.effects.sequencer || L.effects.spring));
-    if (!anyAnim && isExporting !== 'recording') {
+    let now = millis();
+    if (!anyAnim && isExporting !== 'recording' && now > _keepLoopUntil) {
         noLoop();
     }
 }
 
-// Call this when any setting changes to restart draw loop
+// Call this when any setting changes — keeps loop alive for 500ms
 function requestRedraw() {
+    _keepLoopUntil = millis() + 500;
     loop();
 }
 
