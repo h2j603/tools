@@ -8,9 +8,17 @@ let gradientDirty = true;
 
 // ── Background ──
 
+// Cache DOM elements (queried once, not every frame)
+let _bgColorEl, _bgColor2El;
+function getBgColorEls() {
+    if (!_bgColorEl) _bgColorEl = document.getElementById('bgColor');
+    if (!_bgColor2El) _bgColor2El = document.getElementById('bgColor2');
+}
+
 function drawBackground() {
-    let c1 = color(document.getElementById('bgColor').value);
-    let c2 = color(document.getElementById('bgColor2').value);
+    getBgColorEls();
+    let c1 = color(_bgColorEl.value);
+    let c2 = color(_bgColor2El.value);
 
     if (gradientType === 'none') {
         background(c1);
@@ -82,6 +90,7 @@ function markGradientDirty() { gradientDirty = true; }
 // ═══════════════════════════════════
 
 function drawLayers(frameNum) {
+    ensureImagePixels();
     for (let i = 0; i < layers.length; i++) {
         let L = layers[i];
         if (!L.visible || L.currentTiles.length === 0) continue;
@@ -407,8 +416,7 @@ function drawTileChar(sz, c, charSource, idx, L) {
     let ch = charSource[idx % charSource.length];
     let fontSize = sz * 1.1;
 
-    // Use drawingContext directly for reliable CSS font-family support
-    fill(red(c), green(c), blue(c));
+    drawingContext.fillStyle = 'rgb(' + red(c) + ',' + green(c) + ',' + blue(c) + ')';
     drawingContext.font = L.fontWeight + ' ' + fontSize + 'px ' + L.fontFamily;
     drawingContext.textAlign = 'center';
     drawingContext.textBaseline = 'middle';
@@ -628,15 +636,30 @@ function draw3DRotatedTiles(L, frameNum) {
 }
 
 // ═══════════════════════════════════
-// Image Color Sampling — offset-aware
+// Image Color Sampling — offset-aware, pixel-array optimized
+// img.get(x,y) creates a new array per call — very slow.
+// Instead, read pixels once and index directly.
 // ═══════════════════════════════════
 
+let _imgPixelsLoaded = false;
+let _imgPixelsId = null; // track which image's pixels are loaded
+
+function ensureImagePixels() {
+    if (!img) return;
+    // Only loadPixels once per image (check by dimensions as ID proxy)
+    let id = img.width + 'x' + img.height;
+    if (_imgPixelsLoaded && _imgPixelsId === id) return;
+    img.loadPixels();
+    _imgPixelsLoaded = true;
+    _imgPixelsId = id;
+}
+
 function getImageColor(x, y) {
-    if (!img) return color(200);
-    // Account for layer offset so colors match image position
+    if (!img || !img.pixels || img.pixels.length === 0) return color(200);
     let ax = x - _currentLayerOffsetX;
     let ay = y - _currentLayerOffsetY;
-    let ix = constrain(floor(map(ax, 0, width, 0, img.width)), 0, img.width - 1);
-    let iy = constrain(floor(map(ay, 0, height, 0, img.height)), 0, img.height - 1);
-    return img.get(ix, iy);
+    let ix = constrain(floor(ax / width * img.width), 0, img.width - 1);
+    let iy = constrain(floor(ay / height * img.height), 0, img.height - 1);
+    let idx = (iy * img.width + ix) * 4;
+    return color(img.pixels[idx], img.pixels[idx + 1], img.pixels[idx + 2]);
 }

@@ -126,6 +126,10 @@ function extractOutlinePoints(px, w, h, tilePx) {
 
 // ── DENSITY mode: image brightness modulates tile density ──
 function extractDensityPoints(px, w, h, tilePx) {
+    // Ensure image pixels are loaded for brightness sampling
+    if (img && (!img.pixels || img.pixels.length === 0)) {
+        img.loadPixels();
+    }
     let points = [];
     let baseStep = tilePx;
 
@@ -139,11 +143,11 @@ function extractDensityPoints(px, w, h, tilePx) {
             if (px[idx + 3] > 100) {
                 // Get image brightness at this position
                 let brightness = 0.5;
-                if (img) {
-                    let ix = constrain(floor(map(sx, 0, w, 0, img.width)), 0, img.width - 1);
-                    let iy = constrain(floor(map(sy, 0, h, 0, img.height)), 0, img.height - 1);
-                    let c = img.get(ix, iy);
-                    brightness = (red(c) + green(c) + blue(c)) / (3 * 255);
+                if (img && img.pixels && img.pixels.length > 0) {
+                    let ix = constrain(floor(sx / w * img.width), 0, img.width - 1);
+                    let iy = constrain(floor(sy / h * img.height), 0, img.height - 1);
+                    let pidx = (iy * img.width + ix) * 4;
+                    brightness = (img.pixels[pidx] + img.pixels[pidx+1] + img.pixels[pidx+2]) / (3 * 255);
                 }
 
                 // Subdivide: brighter areas get 2x2 sub-tiles

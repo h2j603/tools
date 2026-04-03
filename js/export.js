@@ -99,18 +99,36 @@ async function exportVideo() {
     }
     if (!cnv) { finishExport(savedOffset, savedZoom, btn, progBar); return; }
 
-    // Setup high-quality recording
-    let stream = cnv.captureStream(0); // 0 = manual frame control
-    let track = stream.getVideoTracks()[0];
-    let chunks = [];
+    // Setup high-quality recording (wrapped in try-catch to prevent stuck state)
+    let stream, track, recorder;
+    try {
+        stream = cnv.captureStream(0);
+        track = stream.getVideoTracks()[0];
+    } catch (e) {
+        finishExport(savedOffset, savedZoom, btn, progBar);
+        updateStatus('캡처 스트림 생성 실패', 'error');
+        return;
+    }
 
+    let chunks = [];
     let opts = { videoBitsPerSecond: 40000000 };
     for (let mime of ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']) {
         if (MediaRecorder.isTypeSupported(mime)) { opts.mimeType = mime; break; }
     }
 
-    let recorder = new MediaRecorder(stream, opts);
+    try {
+        recorder = new MediaRecorder(stream, opts);
+    } catch (e) {
+        finishExport(savedOffset, savedZoom, btn, progBar);
+        updateStatus('MediaRecorder 생성 실패', 'error');
+        return;
+    }
+
     recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.onerror = () => {
+        finishExport(savedOffset, savedZoom, btn, progBar);
+        updateStatus('녹화 중 오류 발생', 'error');
+    };
 
     recorder.onstop = () => {
         let blob = new Blob(chunks, { type: opts.mimeType || 'video/webm' });
@@ -125,9 +143,14 @@ async function exportVideo() {
         updateStatus(dur + '초 영상 내보내기 완료!', 'success');
     };
 
-    // Wait a tick for recorder to be ready
     await new Promise(r => setTimeout(r, 50));
-    recorder.start();
+    try {
+        recorder.start();
+    } catch (e) {
+        finishExport(savedOffset, savedZoom, btn, progBar);
+        updateStatus('녹화 시작 실패', 'error');
+        return;
+    }
 
     // Render each frame on our own schedule
     let frame = 0;

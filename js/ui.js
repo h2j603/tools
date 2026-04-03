@@ -328,6 +328,7 @@ function handleImage(e) {
     updateStatus('이미지 로딩...');
     img = loadImage(url,
         () => {
+            _imgPixelsLoaded = false; // invalidate pixel cache for new image
             updateStatus('이미지 준비 완료 → CONVERT', 'success');
             URL.revokeObjectURL(url);
         },
