@@ -495,6 +495,7 @@ function updateCanvas() {
     generateNoiseBuffer();
     markGradientDirty();
     updateCanvasInfoUI();
+    fitCanvasToPreview();
     updateStatus('캔버스: ' + w + ' × ' + h);
 }
 

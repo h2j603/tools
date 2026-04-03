@@ -78,9 +78,8 @@ body, html {
 
 #canvas-wrap canvas {
     display: block;
-    max-width: 100% !important;
-    max-height: 100% !important;
     border-radius: 2px;
+    /* Size controlled by JS fitCanvasToPreview() */
 }
 
 #canvas-info {

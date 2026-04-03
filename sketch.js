@@ -23,7 +23,6 @@ function setup() {
     canvas.parent('canvas-wrap');
     offset = createVector(0, 0);
 
-    // Use 1x for live preview (performance), export will temporarily bump to devicePixelRatio
     pixelDensity(1);
 
     initTheme();
@@ -34,6 +33,7 @@ function setup() {
     initTouchHandlers();
     initKeyboardShortcuts();
     updateCanvasInfoUI();
+    fitCanvasToPreview();
 }
 
 function checkFontAndInit() {
@@ -59,10 +59,37 @@ function checkFontAndInit() {
     }, 100);
 }
 
+// ── Fit canvas CSS size to preview area (aspect-ratio preserving) ──
+function fitCanvasToPreview() {
+    let cnv = document.querySelector('#canvas-wrap canvas');
+    if (!cnv) return;
+    let area = document.getElementById('canvas-area');
+    if (!area) return;
+
+    let areaW = area.clientWidth;
+    let areaH = area.clientHeight;
+    let canvasW = width;
+    let canvasH = height;
+
+    if (areaW <= 0 || areaH <= 0 || canvasW <= 0 || canvasH <= 0) return;
+
+    let scaleX = areaW / canvasW;
+    let scaleY = areaH / canvasH;
+    let s = Math.min(scaleX, scaleY) * 0.95; // 5% padding
+
+    cnv.style.width = Math.floor(canvasW * s) + 'px';
+    cnv.style.height = Math.floor(canvasH * s) + 'px';
+}
+
 // ── p5.js Draw Loop ──
 function draw() {
     if (isExporting) return;
     drawFrame(frameCount);
+}
+
+// Refit on window resize
+function windowResized() {
+    fitCanvasToPreview();
 }
 
 // ── Mouse Interaction (Desktop) ──
@@ -87,7 +114,6 @@ function mouseDragged() {
     let inCanvas = canvasArea && canvasArea.matches(':hover');
 
     if (inFS || inCanvas) {
-        // Convert mouse delta to canvas-local space
         let cnv = document.querySelector('#canvas-wrap canvas') ||
                   document.querySelector('#fullscreen-canvas-holder canvas');
         if (cnv) {
