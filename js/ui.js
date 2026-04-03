@@ -286,9 +286,16 @@ function bindLayerSettingsEvents() {
                 L.morphDirection = 1;
             }
             if (fx === 'scatter' && L.effects.scatter) {
-                L.scatterProgress = 1; // start scattered
-                L.scatterDirection = -1; // gather inward first
+                L.scatterProgress = 1;
+                L.scatterDirection = -1;
                 L._scatterOrigins = null;
+            }
+            if (fx === 'sequencer' && L.effects.sequencer) {
+                L.sequencerProgress = 0;
+            }
+            if (fx === 'spring' && L.effects.spring) {
+                // Initialize spring state for each tile
+                L._springState = null;
             }
         });
     });

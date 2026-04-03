@@ -114,6 +114,24 @@ function drawLayers(frameNum) {
             else if (L.scatterProgress <= 0) { L.scatterProgress = 0; L.scatterDirection = 1; }
         }
 
+        // Sequencer: progressive reveal 0→1→hold→0→hold
+        if (L.effects.sequencer) {
+            let spd = 1 / (L.morphDuration * 120); // slower, one full cycle
+            L.sequencerProgress = min(1, L.sequencerProgress + spd);
+        }
+
+        // Spring: initialize spring physics state
+        if (L.effects.spring && !L._springState) {
+            L._springState = [];
+            for (let j = 0; j < L.currentTiles.length; j++) {
+                L._springState.push({
+                    vy: 0, vx: 0,
+                    dy: -(80 + random(60)), // start offset above
+                    dx: random(-20, 20)
+                });
+            }
+        }
+
         push();
         drawingContext.globalAlpha = L.opacity / 100;
         drawingContext.globalCompositeOperation = L.blendMode;
@@ -310,6 +328,37 @@ function drawTiles(L, frameNum) {
         }
     }
 
+    // Sequencer: precompute per-tile reveal timing
+    let seqActive = L.effects.sequencer && L.sequencerProgress < 1;
+    // Compute sort order for sequencer (left-to-right, top-to-bottom)
+    let seqOrder = null;
+    if (seqActive) {
+        seqOrder = tiles.map((t, i) => ({ i, sort: t.x * 0.7 + t.y * 0.3 }));
+        seqOrder.sort((a, b) => a.sort - b.sort);
+        let seqRank = new Float32Array(tiles.length);
+        for (let k = 0; k < seqOrder.length; k++) {
+            seqRank[seqOrder[k].i] = k / max(1, seqOrder.length - 1);
+        }
+        seqOrder = seqRank; // now seqOrder[i] = 0..1 normalized reveal order
+    }
+
+    // Spring: update physics
+    let springActive = L.effects.spring && L._springState;
+    if (springActive) {
+        let stiffness = 0.08;
+        let damping = 0.82;
+        for (let j = 0; j < min(L._springState.length, tiles.length); j++) {
+            let s = L._springState[j];
+            // Spring toward 0 (home position)
+            s.vy += -s.dy * stiffness;
+            s.vx += -s.dx * stiffness;
+            s.vy *= damping;
+            s.vx *= damping;
+            s.dy += s.vy;
+            s.dx += s.vx;
+        }
+    }
+
     noStroke();
     for (let i = 0; i < tiles.length; i++) {
         let t = tiles[i];
@@ -338,6 +387,26 @@ function drawTiles(L, frameNum) {
             rotate(localT * (((i % 2) * 2) - 1) * PI * 1.5);
         } else {
             translate(t.x, t.y);
+        }
+
+        // Spring: apply spring offset
+        if (springActive && i < L._springState.length) {
+            let s = L._springState[i];
+            translate(s.dx, s.dy);
+        }
+
+        // Sequencer: fade-in with scale based on reveal order
+        if (seqActive && seqOrder) {
+            let revealT = seqOrder[i]; // 0..1 position in reveal order
+            let progress = L.sequencerProgress;
+            // Each tile appears when progress reaches its position
+            let tileReveal = constrain((progress - revealT * 0.8) / 0.2, 0, 1);
+            // Elastic ease-out
+            let elastic = tileReveal === 0 ? 0 : pow(2, -10 * tileReveal) * sin((tileReveal - 0.075) * (TWO_PI) / 0.3) + 1;
+            let s = elastic;
+            scale(s);
+            tileAlpha *= s;
+            if (s < 0.01) { pop(); continue; } // skip invisible tiles
         }
 
         if (L.effects.wave) {
@@ -664,26 +733,22 @@ function draw3DRotatedTiles(L, frameNum) {
     let charSource = (L.text || 'A').replace(/\s/g, '') || 'A';
 
     let cx = width / 2, cy = height / 2;
-    let focalLen = width * 1.2;
+    let focalLen = width * 1.5;
     let maxDim = min(width, height);
 
-    // Scatter support in 3D (regenerate if tile count changed)
-    let scatterActive3D = L.effects.scatter && L.scatterProgress > 0.001;
-    if (scatterActive3D && (!L._scatterOrigins || L._scatterOrigins.length !== tiles.length)) {
-        L._scatterOrigins = [];
-        for (let i = 0; i < tiles.length; i++) {
-            let angle = ((i * 137.508) % 360) * (PI / 180);
-            let dist = maxDim * (0.8 + ((i * 73) % 100) / 100 * 0.7);
-            L._scatterOrigins.push({
-                x: width / 2 + cos(angle) * dist,
-                y: height / 2 + sin(angle) * dist
-            });
-        }
-    }
+    // ── UNIFIED ROTATION (rigid body — the whole text rotates as one) ──
+    let rotY = sin(fn * 0.01) * 0.7;   // Y-axis: slow side-to-side
+    let rotX = sin(fn * 0.007 + 0.5) * 0.4; // X-axis: gentle tilt
+    let cosRY = cos(rotY), sinRY = sin(rotY);
+    let cosRX = cos(rotX), sinRX = sin(rotX);
 
-    // Global rotation (gentle base)
-    let baseRotY = sin(fn * 0.012) * 0.4;
-    let baseRotX = sin(fn * 0.008 + 1) * 0.15;
+    // ── LIGHT DIRECTION (moves with rotation to simulate fixed light) ──
+    let lightDirX = 0.4;
+    let lightDirY = -0.6;
+    let lightDirZ = 0.7;
+    // Normalize
+    let lLen = sqrt(lightDirX*lightDirX + lightDirY*lightDirY + lightDirZ*lightDirZ);
+    lightDirX /= lLen; lightDirY /= lLen; lightDirZ /= lLen;
 
     noStroke();
 
@@ -693,113 +758,141 @@ function draw3DRotatedTiles(L, frameNum) {
         let x = t.x - cx;
         let y = t.y - cy;
 
-        // ── Per-tile individual Z depth ──
-        // Each tile gets its own z based on:
-        // 1) Distance from center (further = more depth variation)
-        // 2) A ripple wave that propagates outward over time
-        // 3) Image brightness (brighter tiles float forward)
-        let distFromCenter = sqrt(x * x + y * y);
-        let normalizedDist = distFromCenter / (maxDim * 0.5);
-
-        // Ripple: concentric wave emanating from center
-        let ripplePhase = distFromCenter * 0.015 - fn * 0.04;
-        let rippleZ = sin(ripplePhase) * maxDim * 0.08;
-
-        // Per-tile wobble (each tile has its own rhythm)
-        let tilePhase = i * 0.7 + fn * 0.025;
-        let wobbleZ = sin(tilePhase) * maxDim * 0.03;
-
-        // Brightness-based depth push
-        let brightnessZ = 0;
+        // ── Z HEIGHT from image brightness (relief/emboss effect) ──
+        let z = 0;
         if (img) {
             let c = getImageColor(t.x, t.y);
             let bri = (red(c) + green(c) + blue(c)) / (3 * 255);
-            brightnessZ = (bri - 0.5) * maxDim * 0.06;
+            z = (bri - 0.3) * maxDim * 0.15; // bright = forward, dark = back
         }
 
-        let z = rippleZ + wobbleZ + brightnessZ;
-
-        // ── Per-tile rotation offset ──
-        // Tiles further from center rotate more (parallax)
-        let tileRotY = baseRotY + sin(fn * 0.02 + i * 0.3) * 0.12 * normalizedDist;
-        let tileRotX = baseRotX + cos(fn * 0.015 + i * 0.5) * 0.08 * normalizedDist;
-
-        let cosY = cos(tileRotY), sinY = sin(tileRotY);
-        let cosX = cos(tileRotX), sinX = sin(tileRotX);
-
-        // Rotate around Y axis
-        let x2 = x * cosY - z * sinY;
-        let z2 = x * sinY + z * cosY;
-
-        // Rotate around X axis
-        let y2 = y * cosX - z2 * sinX;
-        let z3 = y * sinX + z2 * cosX;
+        // Apply unified rotation
+        // Y-axis rotation
+        let x1 = x * cosRY - z * sinRY;
+        let z1 = x * sinRY + z * cosRY;
+        // X-axis rotation
+        let y1 = y * cosRX - z1 * sinRX;
+        let z2 = y * sinRX + z1 * cosRX;
 
         // Perspective projection
-        let scale = focalLen / (focalLen + z3);
-        if (scale < 0.05 || scale > 4) continue;
+        let pScale = focalLen / (focalLen + z2);
+        if (pScale < 0.05 || pScale > 4) continue;
+
+        // Lighting: compute how much this tile faces the light
+        // Surface normal approximation: (0, 0, 1) rotated by same angles
+        let nz = cosRY * cosRX; // simplified normal z after rotation
+        let nx = -sinRY;
+        let ny = -sinRX * cosRY;
+        let lightDot = nx * lightDirX + ny * lightDirY + nz * lightDirZ;
+        let lightAmount = constrain(lightDot * 0.5 + 0.5, 0.3, 1.0);
+
+        // Shadow offset: tiles further from surface cast longer shadows
+        let shadowOff = max(0, z * 0.05) * pScale;
 
         projected.push({
-            sx: cx + x2 * scale,
-            sy: cy + y2 * scale,
-            z: z3,
-            scale: scale,
+            sx: cx + x1 * pScale,
+            sy: cy + y1 * pScale,
+            z: z2,
+            pScale: pScale,
             origIdx: i,
             origTile: t,
-            // Per-tile 2D rotation for "card flip" feel
-            tileRot: sin(fn * 0.02 + i * 0.4) * 0.15
+            lightAmount: lightAmount,
+            shadowOff: shadowOff,
+            origZ: z
         });
     }
 
-    // Sort back-to-front for correct overlap
+    // Sort back-to-front
     projected.sort((a, b) => b.z - a.z);
 
+    // ── SHADOW PASS ──
+    for (let p of projected) {
+        if (p.shadowOff < 0.5) continue;
+        let sz = baseSz * (p.origTile.size || 1) * p.pScale;
+        drawingContext.save();
+        drawingContext.globalAlpha = 0.15;
+        drawingContext.fillStyle = '#000';
+        drawingContext.beginPath();
+        drawingContext.arc(p.sx + p.shadowOff * 2, p.sy + p.shadowOff * 2, sz * 0.5, 0, TWO_PI);
+        drawingContext.fill();
+        drawingContext.restore();
+    }
+
+    // ── TILE PASS ──
     for (let p of projected) {
         let t = p.origTile;
-        let sz = baseSz * (t.size || 1) * p.scale;
+        let sz = baseSz * (t.size || 1) * p.pScale;
 
         if (L.effects.pulse) sz *= sin(fn * 0.05 + p.origIdx * 0.3) * 0.2 + 1;
 
-        // Depth alpha: further tiles dimmer, closer tiles brighter
-        let depthAlpha = constrain(map(p.scale, 0.4, 1.4, 0.2, 1), 0.08, 1);
+        // Depth + lighting alpha
+        let depthAlpha = constrain(map(p.pScale, 0.5, 1.3, 0.4, 1), 0.15, 1);
         let tileAlpha = (t.alpha !== undefined ? t.alpha : 1) * depthAlpha;
 
         push();
-
-        // Scatter in 3D mode
-        if (scatterActive3D && L._scatterOrigins && p.origIdx < L._scatterOrigins.length) {
-            let sp = L.scatterProgress;
-            let eased = sp * sp * (3 - 2 * sp);
-            let stagger = (p.origIdx / tiles.length) * 0.4;
-            let localT = constrain((eased - stagger) / (1 - stagger), 0, 1);
-            let orig = L._scatterOrigins[p.origIdx];
-            let lx = lerp(p.sx, orig.x, localT);
-            let ly = lerp(p.sy, orig.y, localT);
-            translate(lx, ly);
-            let sf = lerp(1, 0.3, localT);
-            scale(sf); // scale BEFORE rotate
-            rotate(localT * (((p.origIdx % 2) * 2) - 1) * PI * 1.5);
-        } else {
-            translate(p.sx, p.sy);
-        }
-
-        rotate(p.tileRot);
+        translate(p.sx, p.sy);
 
         if (L.effects.wave) translate(sin(fn * 0.03 + t.x * 0.008) * 5, 0);
+
+        // Apply lighting: darken tiles facing away from light
         drawingContext.globalAlpha *= tileAlpha;
 
         let c = getImageColor(t.x, t.y);
+        // Modulate color by light amount
+        let lr = constrain(red(c) * p.lightAmount, 0, 255);
+        let lg = constrain(green(c) * p.lightAmount, 0, 255);
+        let lb = constrain(blue(c) * p.lightAmount, 0, 255);
+        let litColor = color(lr, lg, lb);
 
+        // Render tile with lit color
         switch (shape) {
-            case 'circle': drawTileCircle(sz, c); break;
-            case 'char': drawTileChar(sz, c, charSource, p.origIdx, L); break;
-            case 'adaptive': drawTileAdaptive(sz, c, t); break;
-            case 'cross': drawTileCross(sz, c); break;
-            default: drawTileRect(sz, c); break;
+            case 'circle': drawTileCircleLit(sz, litColor); break;
+            case 'char': drawTileCharLit(sz, litColor, charSource, p.origIdx, L); break;
+            case 'cross': drawTileCrossLit(sz, litColor); break;
+            default: drawTileRectLit(sz, litColor); break;
+        }
+
+        // Highlight edge for tiles that protrude (bright relief)
+        if (p.origZ > maxDim * 0.03) {
+            drawingContext.save();
+            drawingContext.globalAlpha = 0.08;
+            drawingContext.strokeStyle = '#fff';
+            drawingContext.lineWidth = 1;
+            drawingContext.strokeRect(-sz/2, -sz/2, sz, sz);
+            drawingContext.restore();
         }
 
         pop();
     }
+}
+
+// ── Lit tile renderers (use pre-computed lit color, no image sampling) ──
+function drawTileRectLit(sz, c) {
+    fill(c);
+    rect(-sz/2, -sz/2, sz, sz);
+}
+
+function drawTileCircleLit(sz, c) {
+    fill(c);
+    ellipse(0, 0, sz, sz);
+}
+
+function drawTileCharLit(sz, c, charSource, idx, L) {
+    let ch = charSource[idx % charSource.length];
+    let fontSize = sz * 1.1;
+    drawingContext.fillStyle = 'rgb(' + red(c) + ',' + green(c) + ',' + blue(c) + ')';
+    drawingContext.font = L.fontWeight + ' ' + fontSize + 'px ' + L.fontFamily;
+    drawingContext.textAlign = 'center';
+    drawingContext.textBaseline = 'middle';
+    drawingContext.fillText(ch, 0, 0);
+}
+
+function drawTileCrossLit(sz, c) {
+    fill(c);
+    let arm = sz * 0.3;
+    let half = sz / 2;
+    rect(-arm/2, -half, arm, sz);
+    rect(-half, -arm/2, sz, arm);
 }
 
 // ═══════════════════════════════════
