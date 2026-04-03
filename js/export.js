@@ -147,8 +147,16 @@ async function exportVideo() {
     }
 
     let chunks = [];
-    let opts = { videoBitsPerSecond: 40000000 * expScale };
-    for (let mime of ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']) {
+    // VP8 first on mobile (VP9 encoding is too heavy for mobile GPUs)
+    // VP9 first on desktop (better quality per bit)
+    let isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    let codecOrder = isMobile
+        ? ['video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm']
+        : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+
+    let bitrate = isMobile ? 20000000 * expScale : 40000000 * expScale;
+    let opts = { videoBitsPerSecond: bitrate };
+    for (let mime of codecOrder) {
         if (MediaRecorder.isTypeSupported(mime)) { opts.mimeType = mime; break; }
     }
 
@@ -184,7 +192,7 @@ async function exportVideo() {
     // Let draw() run — it's NOT blocked by isExporting anymore during recording
     isExporting = 'recording'; // special state: draw() runs but user can't trigger another export
 
-    recorder.start();
+    recorder.start(1000); // 1s timeslice — flush data regularly, reduce memory pressure
     updateStatus('실시간 녹화 중... ' + totalDur + '초');
 
     // Progress timer
