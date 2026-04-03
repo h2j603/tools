@@ -97,6 +97,14 @@ function drawLayers(frameNum) {
             L.currentTiles = L.tiles1;
         }
 
+        // Scatter (photo particle rebuild) update
+        if (L.effects.scatter) {
+            let spd = 1 / (L.morphDuration * 60);
+            L.scatterProgress += L.scatterDirection * spd;
+            if (L.scatterProgress >= 1) { L.scatterProgress = 1; L.scatterDirection = -1; }
+            else if (L.scatterProgress <= 0) { L.scatterProgress = 0; L.scatterDirection = 1; }
+        }
+
         push();
         drawingContext.globalAlpha = L.opacity / 100;
         drawingContext.globalCompositeOperation = L.blendMode;
@@ -279,6 +287,21 @@ function drawTiles(L, frameNum) {
     let charSource = (L.text || 'A').replace(/\s/g, '');
     if (charSource.length === 0) charSource = 'A';
 
+    // Scatter: compute per-tile scatter origin (cached)
+    let scatterActive = L.effects.scatter && L.scatterProgress > 0.001;
+    if (scatterActive && !L._scatterOrigins) {
+        // Generate deterministic random scatter origins for each tile
+        L._scatterOrigins = [];
+        for (let i = 0; i < tiles.length; i++) {
+            let angle = ((i * 137.508) % 360) * (PI / 180); // golden angle spread
+            let dist = min(width, height) * (0.8 + ((i * 73) % 100) / 100 * 0.7);
+            L._scatterOrigins.push({
+                x: width / 2 + cos(angle) * dist,
+                y: height / 2 + sin(angle) * dist
+            });
+        }
+    }
+
     noStroke();
     for (let i = 0; i < tiles.length; i++) {
         let t = tiles[i];
@@ -291,7 +314,26 @@ function drawTiles(L, frameNum) {
         let tileAlpha = t.alpha !== undefined ? t.alpha : 1;
 
         push();
-        translate(t.x, t.y);
+
+        // Scatter: interpolate between scatter origin and home position
+        if (scatterActive && L._scatterOrigins && i < L._scatterOrigins.length) {
+            let sp = L.scatterProgress;
+            let eased = sp * sp * (3 - 2 * sp); // Hermite ease
+            let orig = L._scatterOrigins[i];
+            // Stagger: each tile arrives at slightly different time
+            let stagger = (i / tiles.length) * 0.4;
+            let localT = constrain((eased - stagger) / (1 - stagger), 0, 1);
+            let lx = lerp(t.x, orig.x, localT);
+            let ly = lerp(t.y, orig.y, localT);
+            translate(lx, ly);
+            // Spin while scattered
+            rotate(localT * (((i % 2) * 2) - 1) * PI * 1.5);
+            // Shrink while far away
+            let scaleF = lerp(1, 0.3, localT);
+            scale(scaleF);
+        } else {
+            translate(t.x, t.y);
+        }
 
         if (L.effects.wave) {
             translate(sin(fn * 0.03 + t.x * 0.008) * 8, cos(fn * 0.025 + t.y * 0.008) * 6);

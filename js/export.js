@@ -10,10 +10,9 @@ function saveImage() {
     offset = createVector(0, 0);
     zoom = 1.0;
 
-    // Temporarily use device pixel density for sharp export
     let oldPD = pixelDensity();
     pixelDensity(window.devicePixelRatio || 1);
-    resizeCanvas(width, height); // force buffer rebuild at new density
+    resizeCanvas(width, height);
     drawFrame(frameCount);
     saveCanvas('TEXT_MOSAIC', 'png');
     pixelDensity(1);
@@ -21,6 +20,37 @@ function saveImage() {
 
     offset = so; zoom = sz;
     updateStatus('이미지 저장됨!', 'success');
+}
+
+// ── Transparent Background PNG ──
+function saveTransparentImage() {
+    let so = offset.copy(), sz = zoom;
+    offset = createVector(0, 0);
+    zoom = 1.0;
+
+    let oldPD = pixelDensity();
+    pixelDensity(window.devicePixelRatio || 1);
+    resizeCanvas(width, height);
+
+    // Clear to transparent (not background color)
+    clear();
+
+    // Draw only tiles, no background
+    if (fontReady) {
+        push();
+        translate(width / 2, height / 2);
+        scale(zoom);
+        translate(-width / 2 + offset.x, -height / 2 + offset.y);
+        drawLayers(frameCount);
+        pop();
+    }
+
+    saveCanvas('TEXT_MOSAIC_TRANSPARENT', 'png');
+
+    pixelDensity(1);
+    resizeCanvas(width, height);
+    offset = so; zoom = sz;
+    updateStatus('투명 배경 PNG 저장됨!', 'success');
 }
 
 // ═══════════════════════════════════

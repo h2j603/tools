@@ -25,7 +25,9 @@ class Layer {
         this.opacity = 100;
         this.blendMode = 'source-over';
         this.morphDuration = 2;
-        this.effects = { web: false, rotate: false, pulse: false, morph: false, wave: false, rotate3d: false, vortex: false };
+        this.effects = { web: false, rotate: false, pulse: false, morph: false, wave: false, rotate3d: false, vortex: false, scatter: false };
+        this.scatterProgress = 0; // 0 = assembled, 1 = fully scattered
+        this.scatterDirection = 1;
         this.tiles1 = [];
         this.tiles2 = [];
         this.currentTiles = [];

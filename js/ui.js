@@ -155,6 +155,7 @@ function bindGlobalEvents() {
     document.getElementById('convertBtn').addEventListener('click', convertAll);
     document.getElementById('resizeBtn').addEventListener('click', updateCanvas);
     document.getElementById('saveBtn').addEventListener('click', saveImage);
+    document.getElementById('saveTransBtn').addEventListener('click', saveTransparentImage);
     document.getElementById('exportVideoBtn').addEventListener('click', exportVideo);
     document.getElementById('previewBtn').addEventListener('click', enterFullscreen);
     document.getElementById('closeFullscreen').addEventListener('click', exitFullscreen);
@@ -283,6 +284,11 @@ function bindLayerSettingsEvents() {
             if (fx === 'morph' && L.effects.morph) {
                 L.morphProgress = 0;
                 L.morphDirection = 1;
+            }
+            if (fx === 'scatter' && L.effects.scatter) {
+                L.scatterProgress = 0;
+                L.scatterDirection = 1;
+                L._scatterOrigins = null; // regenerate scatter origins
             }
         });
     });
