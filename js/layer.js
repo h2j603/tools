@@ -9,7 +9,7 @@ const FONT_OPTIONS = [
     { value: "'Noto Sans KR', sans-serif", label: 'Noto Sans KR' },
     { value: "'Noto Serif KR', serif", label: 'Noto Serif KR' },
     { value: "'Black Han Sans', sans-serif", label: '블랙한산스' },
-    { value: "'Sunflower', sans-serif", label: '순바탕(해바라기)' },
+    { value: "'SunBatang', serif", label: '순바탕' },
     { value: 'serif', label: 'Serif' },
     { value: 'sans-serif', label: 'Sans-serif' },
     { value: 'monospace', label: 'Monospace' },
