@@ -77,7 +77,10 @@ async function exportVideo() {
 
     let dur = constrain(parseInt(document.getElementById('videoDuration').value) || 3, 1, 30);
     let loops = constrain(parseInt(document.getElementById('videoLoops').value) || 1, 1, 20);
-    let fps = 60;
+    // Use 30fps for export — half the frames, double the animation step per frame
+    // This gives encoder 2x more time per frame and produces smoother playback
+    let fps = 30;
+    let animStepsPerFrame = 2; // advance animation by 2 ticks per rendered frame (equivalent to 60fps motion)
     let framesPerLoop = fps * dur;
     let totalFrames = framesPerLoop * loops;
 
@@ -189,53 +192,54 @@ async function exportVideo() {
             }
         }
 
-        // Advance all animation states deterministically
-        for (let L of layers) {
-            // Morph (replicate the same logic from renderer drawLayers)
-            if (L.effects.morph && L.morphSteps && L.morphSteps.length > 1) {
-                if (L.morphHolding) {
-                    L.morphHoldTimer -= 1/fps;
-                    if (L.morphHoldTimer <= 0) {
-                        L.morphHolding = false;
-                        L.morphProgress = 0;
-                        L.morphStepIdx++;
-                        if (L.morphStepIdx >= L.morphSteps.length) L.morphStepIdx = 0;
-                        L._morphPairs = null;
-                    }
-                } else {
-                    let ppf = 1 / (L.morphDuration * fps);
-                    L.morphProgress += ppf;
-                    if (L.morphProgress >= 1) {
-                        L.morphProgress = 1;
-                        if (L.morphHold > 0) {
-                            L.morphHolding = true;
-                            L.morphHoldTimer = L.morphHold;
-                        } else {
+        // Advance animation by multiple ticks per frame (30fps render, 60fps motion)
+        // Advance animation N ticks (30fps render with 60fps-equivalent motion)
+        let motionFps = 60; // always 60 for consistent motion speed
+        for (let step = 0; step < animStepsPerFrame; step++) {
+            for (let L of layers) {
+                if (L.effects.morph && L.morphSteps && L.morphSteps.length > 1) {
+                    if (L.morphHolding) {
+                        L.morphHoldTimer -= 1/motionFps;
+                        if (L.morphHoldTimer <= 0) {
+                            L.morphHolding = false;
                             L.morphProgress = 0;
                             L.morphStepIdx++;
                             if (L.morphStepIdx >= L.morphSteps.length) L.morphStepIdx = 0;
                             L._morphPairs = null;
                         }
+                    } else {
+                        let ppf = 1 / (L.morphDuration * motionFps);
+                        L.morphProgress += ppf;
+                        if (L.morphProgress >= 1) {
+                            L.morphProgress = 1;
+                            if (L.morphHold > 0) {
+                                L.morphHolding = true;
+                                L.morphHoldTimer = L.morphHold;
+                            } else {
+                                L.morphProgress = 0;
+                                L.morphStepIdx++;
+                                if (L.morphStepIdx >= L.morphSteps.length) L.morphStepIdx = 0;
+                                L._morphPairs = null;
+                            }
+                        }
                     }
+                    let fromIdx = L.morphStepIdx;
+                    let toIdx = (L.morphStepIdx + 1) % L.morphSteps.length;
+                    L.tiles1 = L.morphSteps[fromIdx];
+                    L.tiles2 = L.morphSteps[toIdx];
+                    if (!L._morphPairs) L._morphPairs = buildSpatialMorphMap(L.tiles1, L.tiles2);
+                    updateMorphedTiles(L);
                 }
-                let fromIdx = L.morphStepIdx;
-                let toIdx = (L.morphStepIdx + 1) % L.morphSteps.length;
-                L.tiles1 = L.morphSteps[fromIdx];
-                L.tiles2 = L.morphSteps[toIdx];
-                if (!L._morphPairs) L._morphPairs = buildSpatialMorphMap(L.tiles1, L.tiles2);
-                updateMorphedTiles(L);
-            }
-            // Scatter
-            if (L.effects.scatter) {
-                let spd = 1 / (L.morphDuration * fps);
-                L.scatterProgress += L.scatterDirection * spd;
-                if (L.scatterProgress >= 1) { L.scatterProgress = 1; L.scatterDirection = -1; }
-                else if (L.scatterProgress <= 0) { L.scatterProgress = 0; L.scatterDirection = 1; }
-            }
-            // Sequencer
-            if (L.effects.sequencer) {
-                L.sequencerProgress += 1 / (L.morphDuration * fps * 2);
-                if (L.sequencerProgress > 1.5) L.sequencerProgress = 0;
+                if (L.effects.scatter) {
+                    let spd = 1 / (L.morphDuration * motionFps);
+                    L.scatterProgress += L.scatterDirection * spd;
+                    if (L.scatterProgress >= 1) { L.scatterProgress = 1; L.scatterDirection = -1; }
+                    else if (L.scatterProgress <= 0) { L.scatterProgress = 0; L.scatterDirection = 1; }
+                }
+                if (L.effects.sequencer) {
+                    L.sequencerProgress += 1 / (L.morphDuration * motionFps * 2);
+                    if (L.sequencerProgress > 1.5) L.sequencerProgress = 0;
+                }
             }
         }
 
