@@ -239,7 +239,8 @@ async function exportVideo() {
             }
         }
 
-        // Draw this frame
+        // Draw this frame and measure render time
+        let renderStart = performance.now();
         drawBackground();
         if (fontReady) {
             push();
@@ -249,19 +250,25 @@ async function exportVideo() {
             drawLayers(frame);
             pop();
         }
+        let renderTime = performance.now() - renderStart;
 
-        // Signal frame to recorder — wait for paint to complete
-        if (track && track.requestFrame) {
-            track.requestFrame();
-        }
+        // Wait for paint to flush to canvas, THEN signal frame to recorder
+        // rAF guarantees the canvas buffer is ready for capture
+        requestAnimationFrame(() => {
+            if (track && track.requestFrame) {
+                track.requestFrame();
+            }
 
-        frame++;
-        let pct = Math.round((frame / totalFrames) * 100);
-        progFill.style.width = pct + '%';
-        if (frame % 6 === 0) updateStatus('내보내기 ' + pct + '%...');
+            frame++;
+            let pct = Math.round((frame / totalFrames) * 100);
+            progFill.style.width = pct + '%';
+            if (frame % 6 === 0) updateStatus('내보내기 ' + pct + '%...');
 
-        // Give encoder time to process before next frame
-        setTimeout(renderNext, encodeDelay);
+            // Dynamic delay: at least 20ms, or 2x render time (whichever is larger)
+            // This ensures encoder has enough time even with heavy frames
+            let delay = Math.max(20, renderTime * 2);
+            setTimeout(renderNext, delay);
+        });
     }
 
     setTimeout(renderNext, 100);
