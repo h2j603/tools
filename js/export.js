@@ -93,11 +93,26 @@ async function exportVideo() {
     let progFill = document.getElementById('exportProgressFill');
     progBar.classList.remove('hidden');
 
+    // Apply export scale — temporarily upscale canvas for hi-res video
+    let expScale = getExportScale();
+    let origW = width;
+    let origH = height;
+
     // Save state
     let savedOffset = offset.copy();
     let savedZoom = zoom;
     offset = createVector(0, 0);
     zoom = 1.0;
+
+    // Upscale canvas if needed
+    if (expScale > 1) {
+        pixelDensity(expScale);
+        resizeCanvas(origW, origH);
+        // Regenerate buffers at new density
+        generateNoiseBuffer();
+        markGradientDirty();
+        _imgPixelsLoaded = false;
+    }
 
     // Reset all animations to start
     for (let L of layers) {
@@ -109,7 +124,7 @@ async function exportVideo() {
     if (!cnv) {
         cnv = document.querySelector('#fullscreen-canvas-holder canvas');
     }
-    if (!cnv) { finishExport(savedOffset, savedZoom, btn, progBar); return; }
+    if (!cnv) { finishExport(savedOffset, savedZoom, btn, progBar, expScale); return; }
 
     // Setup high-quality recording (wrapped in try-catch to prevent stuck state)
     let stream, track, recorder;
@@ -117,13 +132,14 @@ async function exportVideo() {
         stream = cnv.captureStream(0);
         track = stream.getVideoTracks()[0];
     } catch (e) {
-        finishExport(savedOffset, savedZoom, btn, progBar);
+        finishExport(savedOffset, savedZoom, btn, progBar, expScale);
         updateStatus('캡처 스트림 생성 실패', 'error');
         return;
     }
 
     let chunks = [];
-    let opts = { videoBitsPerSecond: 40000000 };
+    // Scale bitrate with resolution: 40Mbps at 1x, 80 at 2x, 160 at 4x
+    let opts = { videoBitsPerSecond: 40000000 * expScale };
     for (let mime of ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']) {
         if (MediaRecorder.isTypeSupported(mime)) { opts.mimeType = mime; break; }
     }
@@ -131,14 +147,14 @@ async function exportVideo() {
     try {
         recorder = new MediaRecorder(stream, opts);
     } catch (e) {
-        finishExport(savedOffset, savedZoom, btn, progBar);
+        finishExport(savedOffset, savedZoom, btn, progBar, expScale);
         updateStatus('MediaRecorder 생성 실패', 'error');
         return;
     }
 
     recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
     recorder.onerror = () => {
-        finishExport(savedOffset, savedZoom, btn, progBar);
+        finishExport(savedOffset, savedZoom, btn, progBar, expScale);
         updateStatus('녹화 중 오류 발생', 'error');
     };
 
@@ -146,12 +162,13 @@ async function exportVideo() {
         let blob = new Blob(chunks, { type: opts.mimeType || 'video/webm' });
         let a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'TEXT_MOSAIC_HQ.webm';
+        let resLabel = origW * expScale + 'x' + origH * expScale;
+        a.download = 'TEXT_MOSAIC_' + resLabel + '.webm';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-        finishExport(savedOffset, savedZoom, btn, progBar);
+        finishExport(savedOffset, savedZoom, btn, progBar, expScale);
         let loopMsg = loops > 1 ? ' (' + loops + '회 루프)' : '';
         updateStatus(dur + '초' + loopMsg + ' 영상 내보내기 완료!', 'success');
     };
@@ -160,7 +177,7 @@ async function exportVideo() {
     try {
         recorder.start();
     } catch (e) {
-        finishExport(savedOffset, savedZoom, btn, progBar);
+        finishExport(savedOffset, savedZoom, btn, progBar, expScale);
         updateStatus('녹화 시작 실패', 'error');
         return;
     }
@@ -278,10 +295,19 @@ async function exportVideo() {
     setTimeout(renderNext, 100);
 }
 
-function finishExport(savedOffset, savedZoom, btn, progBar) {
+function finishExport(savedOffset, savedZoom, btn, progBar, restoreScale) {
     isExporting = false;
     offset = savedOffset;
     zoom = savedZoom;
+    // Restore canvas to 1x density
+    if (restoreScale && restoreScale > 1) {
+        pixelDensity(1);
+        resizeCanvas(width, height);
+        generateNoiseBuffer();
+        markGradientDirty();
+        _imgPixelsLoaded = false;
+        fitCanvasToPreview();
+    }
     btn.classList.remove('exporting');
     btn.textContent = 'EXPORT VIDEO';
     progBar.classList.add('hidden');
