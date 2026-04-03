@@ -287,13 +287,12 @@ function drawTiles(L, frameNum) {
     let charSource = (L.text || 'A').replace(/\s/g, '');
     if (charSource.length === 0) charSource = 'A';
 
-    // Scatter: compute per-tile scatter origin (cached)
+    // Scatter: compute scatter origins (regenerate if tile count changed)
     let scatterActive = L.effects.scatter && L.scatterProgress > 0.001;
-    if (scatterActive && !L._scatterOrigins) {
-        // Generate deterministic random scatter origins for each tile
+    if (scatterActive && (!L._scatterOrigins || L._scatterOrigins.length !== tiles.length)) {
         L._scatterOrigins = [];
         for (let i = 0; i < tiles.length; i++) {
-            let angle = ((i * 137.508) % 360) * (PI / 180); // golden angle spread
+            let angle = ((i * 137.508) % 360) * (PI / 180);
             let dist = min(width, height) * (0.8 + ((i * 73) % 100) / 100 * 0.7);
             L._scatterOrigins.push({
                 x: width / 2 + cos(angle) * dist,
@@ -318,19 +317,16 @@ function drawTiles(L, frameNum) {
         // Scatter: interpolate between scatter origin and home position
         if (scatterActive && L._scatterOrigins && i < L._scatterOrigins.length) {
             let sp = L.scatterProgress;
-            let eased = sp * sp * (3 - 2 * sp); // Hermite ease
+            let eased = sp * sp * (3 - 2 * sp);
             let orig = L._scatterOrigins[i];
-            // Stagger: each tile arrives at slightly different time
             let stagger = (i / tiles.length) * 0.4;
             let localT = constrain((eased - stagger) / (1 - stagger), 0, 1);
             let lx = lerp(t.x, orig.x, localT);
             let ly = lerp(t.y, orig.y, localT);
             translate(lx, ly);
-            // Spin while scattered
-            rotate(localT * (((i % 2) * 2) - 1) * PI * 1.5);
-            // Shrink while far away
             let scaleF = lerp(1, 0.3, localT);
-            scale(scaleF);
+            scale(scaleF); // scale BEFORE rotate
+            rotate(localT * (((i % 2) * 2) - 1) * PI * 1.5);
         } else {
             translate(t.x, t.y);
         }
@@ -411,12 +407,12 @@ function drawTileChar(sz, c, charSource, idx, L) {
     let ch = charSource[idx % charSource.length];
     let fontSize = sz * 1.1;
 
+    // Use drawingContext directly for reliable CSS font-family support
     fill(red(c), green(c), blue(c));
-    textAlign(CENTER, CENTER);
-    textFont(L.fontFamily);
-    textStyle(L.fontWeight === '700' ? BOLD : (L.fontWeight === '900' ? BOLD : NORMAL));
-    textSize(fontSize);
-    text(ch, 0, 0);
+    drawingContext.font = L.fontWeight + ' ' + fontSize + 'px ' + L.fontFamily;
+    drawingContext.textAlign = 'center';
+    drawingContext.textBaseline = 'middle';
+    drawingContext.fillText(ch, 0, 0);
 }
 
 // ── Tile Shape: Adaptive ──
@@ -496,9 +492,9 @@ function draw3DRotatedTiles(L, frameNum) {
     let focalLen = width * 1.2;
     let maxDim = min(width, height);
 
-    // Scatter support in 3D
+    // Scatter support in 3D (regenerate if tile count changed)
     let scatterActive3D = L.effects.scatter && L.scatterProgress > 0.001;
-    if (scatterActive3D && !L._scatterOrigins) {
+    if (scatterActive3D && (!L._scatterOrigins || L._scatterOrigins.length !== tiles.length)) {
         L._scatterOrigins = [];
         for (let i = 0; i < tiles.length; i++) {
             let angle = ((i * 137.508) % 360) * (PI / 180);
@@ -605,9 +601,9 @@ function draw3DRotatedTiles(L, frameNum) {
             let lx = lerp(p.sx, orig.x, localT);
             let ly = lerp(p.sy, orig.y, localT);
             translate(lx, ly);
-            rotate(localT * (((p.origIdx % 2) * 2) - 1) * PI * 1.5);
             let sf = lerp(1, 0.3, localT);
-            scale(sf);
+            scale(sf); // scale BEFORE rotate
+            rotate(localT * (((p.origIdx % 2) * 2) - 1) * PI * 1.5);
         } else {
             translate(p.sx, p.sy);
         }
