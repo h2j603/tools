@@ -790,6 +790,79 @@ kbd {
     }
 }
 
+/* ─── Morph Step Cards ─── */
+.morph-step-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.morph-step-card {
+    background: var(--bg-0);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    animation: fadeIn 0.15s ease;
+    position: relative;
+}
+
+.morph-step-card .step-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.morph-step-card .step-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.5px;
+}
+
+.morph-step-card .step-del-btn {
+    width: 18px; height: 18px;
+    background: none; border: none;
+    color: var(--text-3);
+    cursor: pointer;
+    display: grid; place-items: center;
+    font-size: 12px;
+    border-radius: 3px;
+    transition: all var(--tr);
+}
+
+.morph-step-card .step-del-btn:hover {
+    color: var(--danger);
+    background: rgba(255,68,85,0.1);
+}
+
+.morph-step-card textarea {
+    min-height: 32px;
+    padding: 6px 8px;
+    font-size: 11px;
+}
+
+.morph-step-card select {
+    padding: 5px 24px 5px 8px;
+    font-size: 10px;
+}
+
+.morph-step-card .step-row {
+    display: flex;
+    gap: 5px;
+    align-items: flex-end;
+}
+
+.morph-step-card .step-row .field { flex: 1; }
+
+.morph-step-card .toggle-group { gap: 3px; }
+.morph-step-card .toggle-btn { padding: 4px 3px; font-size: 8px; }
+
 /* ─── Reduced Motion ─── */
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {

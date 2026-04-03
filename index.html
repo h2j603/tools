@@ -81,58 +81,39 @@
                     </div>
 
                     <div class="field">
-                        <label for="layerMorphText">MORPH TEXT</label>
-                        <textarea id="layerMorphText" rows="2" placeholder="모핑 텍스트 (|||로 여러 단계)" spellcheck="false">B</textarea>
+                        <label for="layerFont">FONT</label>
+                        <select id="layerFont">
+                            <option value="kozuka-mincho-pr6n, serif" selected>Kozuka Mincho</option>
+                            <option value="'Noto Sans KR', sans-serif">Noto Sans KR</option>
+                            <option value="'Noto Serif KR', serif">Noto Serif KR</option>
+                            <option value="'Black Han Sans', sans-serif">블랙한산스</option>
+                            <option value="serif">Serif</option>
+                            <option value="sans-serif">Sans-serif</option>
+                            <option value="monospace">Monospace</option>
+                            <option value="Georgia, serif">Georgia</option>
+                            <option value="'Courier New', monospace">Courier New</option>
+                        </select>
                     </div>
 
-                    <div class="row-2">
-                        <div class="field">
-                            <label for="layerFont">FONT</label>
-                            <select id="layerFont">
-                                <option value="kozuka-mincho-pr6n, serif" selected>Kozuka Mincho</option>
-                                <option value="'Noto Sans KR', sans-serif">Noto Sans KR</option>
-                                <option value="serif">Serif</option>
-                                <option value="sans-serif">Sans-serif</option>
-                                <option value="monospace">Monospace</option>
-                                <option value="Georgia, serif">Georgia</option>
-                                <option value="'Courier New', monospace">Courier New</option>
-                                <option value="'Noto Serif KR', serif">Noto Serif KR</option>
-                                <option value="'Black Han Sans', sans-serif">블랙한산스</option>
-                            </select>
-                        </div>
-                        <div class="field">
-                            <label for="layerMorphFont">MORPH FONT</label>
-                            <select id="layerMorphFont">
-                                <option value="kozuka-mincho-pr6n, serif" selected>Kozuka Mincho</option>
-                                <option value="'Noto Sans KR', sans-serif">Noto Sans KR</option>
-                                <option value="serif">Serif</option>
-                                <option value="sans-serif">Sans-serif</option>
-                                <option value="monospace">Monospace</option>
-                                <option value="Georgia, serif">Georgia</option>
-                                <option value="'Courier New', monospace">Courier New</option>
-                                <option value="'Noto Serif KR', serif">Noto Serif KR</option>
-                                <option value="'Black Han Sans', sans-serif">블랙한산스</option>
-                            </select>
+                    <div class="field">
+                        <label>WEIGHT</label>
+                        <div class="toggle-group">
+                            <button class="toggle-btn weight-btn active" data-weight="400">Rg</button>
+                            <button class="toggle-btn weight-btn" data-weight="700">Bd</button>
+                            <button class="toggle-btn weight-btn" data-weight="900">Bk</button>
                         </div>
                     </div>
 
-                    <div class="row-2">
-                        <div class="field">
-                            <label>WEIGHT</label>
-                            <div class="toggle-group">
-                                <button class="toggle-btn weight-btn active" data-weight="400">Rg</button>
-                                <button class="toggle-btn weight-btn" data-weight="700">Bd</button>
-                                <button class="toggle-btn weight-btn" data-weight="900">Bk</button>
-                            </div>
+                    <!-- Morph Steps (dynamic cards) -->
+                    <div class="field">
+                        <div class="section-header" style="margin-bottom:4px">
+                            <label>MORPH STEPS</label>
+                            <button id="addMorphStepBtn" class="icon-btn" title="모프 단계 추가" style="width:22px;height:22px">
+                                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2V14M2 8H14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                            </button>
                         </div>
-                        <div class="field">
-                            <label>MORPH WEIGHT</label>
-                            <div class="toggle-group">
-                                <button class="toggle-btn morph-weight-btn active" data-weight="400">Rg</button>
-                                <button class="toggle-btn morph-weight-btn" data-weight="700">Bd</button>
-                                <button class="toggle-btn morph-weight-btn" data-weight="900">Bk</button>
-                            </div>
-                        </div>
+                        <div id="morphStepList" class="morph-step-list"></div>
+                    </div>
                     </div>
 
                     <div class="row-2">

@@ -4,17 +4,30 @@
 
 const LAYER_COLORS = ['#4488ff','#ff4488','#44cc88','#ffaa44','#aa44ff','#44dddd','#ff6644','#88cc44'];
 
+const FONT_OPTIONS = [
+    { value: 'kozuka-mincho-pr6n, serif', label: 'Kozuka Mincho' },
+    { value: "'Noto Sans KR', sans-serif", label: 'Noto Sans KR' },
+    { value: "'Noto Serif KR', serif", label: 'Noto Serif KR' },
+    { value: "'Black Han Sans', sans-serif", label: '블랙한산스' },
+    { value: 'serif', label: 'Serif' },
+    { value: 'sans-serif', label: 'Sans-serif' },
+    { value: 'monospace', label: 'Monospace' },
+    { value: 'Georgia, serif', label: 'Georgia' },
+    { value: "'Courier New', monospace", label: 'Courier New' }
+];
+
 class Layer {
     constructor(id) {
         this.id = id;
         this.name = 'Layer ' + (id + 1);
         this.visible = true;
         this.text = 'A';
-        this.morphText = 'B';
         this.fontFamily = 'kozuka-mincho-pr6n, serif';
         this.fontWeight = '400';
-        this.morphFontFamily = 'kozuka-mincho-pr6n, serif';
-        this.morphFontWeight = '400';
+        // Morph steps: each step = { text, fontFamily, fontWeight }
+        this.morphStepDefs = [
+            { text: 'B', fontFamily: 'kozuka-mincho-pr6n, serif', fontWeight: '400' }
+        ];
         this.fontSize = 50;
         this.tileSize = 5;
         this.tileMode = 'fill';
@@ -34,8 +47,8 @@ class Layer {
         this.sequencerProgress = 0;
         this.tiles1 = [];
         this.tiles2 = [];
-        this.morphSteps = [];  // array of tile arrays for multi-morph
-        this.morphStepIdx = 0; // current step index
+        this.morphSteps = []; // generated tile arrays
+        this.morphStepIdx = 0;
         this.currentTiles = [];
         this.morphProgress = 0;
         this.morphDirection = 1;

@@ -207,29 +207,25 @@ function normalizeToCenter(arr) {
 function generateLayerTiles(L) {
     if (!fontReady) return;
 
-    // Generate tiles for main text
+    // Step 0: main text with layer font
     randomSeed(L.id * 1000 + 42);
     L.tiles1 = extractTextPoints(L.text, L);
     normalizeToCenter(L.tiles1);
 
-    // Parse morph text: split by ||| for multi-step morph
-    let morphTexts = L.morphText.split('|||').map(s => s.trim()).filter(s => s.length > 0);
-    if (morphTexts.length === 0) morphTexts = [L.morphText || 'B'];
-
-    let morphSettings = Object.create(L);
-    morphSettings.fontFamily = L.morphFontFamily || L.fontFamily;
-    morphSettings.fontWeight = L.morphFontWeight || L.fontWeight;
-
-    // Generate all morph steps
-    L.morphSteps = [L.tiles1]; // step 0 = original text
-    for (let si = 0; si < morphTexts.length; si++) {
+    // Steps 1..N: each morphStepDef has its own text/font/weight
+    L.morphSteps = [L.tiles1];
+    let defs = L.morphStepDefs || [];
+    for (let si = 0; si < defs.length; si++) {
+        let def = defs[si];
+        let stepSettings = Object.create(L);
+        stepSettings.fontFamily = def.fontFamily || L.fontFamily;
+        stepSettings.fontWeight = def.fontWeight || L.fontWeight;
         randomSeed(L.id * 1000 + 99 + si * 50);
-        let stepTiles = extractTextPoints(morphTexts[si], morphSettings);
+        let stepTiles = extractTextPoints(def.text || 'B', stepSettings);
         normalizeToCenter(stepTiles);
         L.morphSteps.push(stepTiles);
     }
 
-    // For backward compat: tiles2 = first morph target
     L.tiles2 = L.morphSteps.length > 1 ? L.morphSteps[1] : L.tiles1;
 
     L.currentTiles = L.tiles1.map(t => ({ ...t }));

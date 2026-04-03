@@ -112,10 +112,9 @@ function loadLayerToUI(L) {
     if (!L) return;
     document.getElementById('activeLayerTitle').textContent = L.name.toUpperCase();
     document.getElementById('layerText').value = L.text;
-    document.getElementById('layerMorphText').value = L.morphText;
     document.getElementById('layerFont').value = L.fontFamily;
-    document.getElementById('layerMorphFont').value = L.morphFontFamily;
     document.getElementById('layerBlendMode').value = L.blendMode;
+    renderMorphStepCards(L);
 
     let sliders = {
         layerFontSize: ['layerFontSizeVal', L.fontSize],
@@ -140,9 +139,6 @@ function loadLayerToUI(L) {
     document.querySelectorAll('.weight-btn').forEach(b => {
         b.classList.toggle('active', b.dataset.weight === L.fontWeight);
     });
-    document.querySelectorAll('.morph-weight-btn').forEach(b => {
-        b.classList.toggle('active', b.dataset.weight === L.morphFontWeight);
-    });
     document.querySelectorAll('.effect-btn').forEach(btn => {
         btn.classList.toggle('active', L.effects[btn.dataset.effect]);
     });
@@ -156,6 +152,90 @@ function loadLayerToUI(L) {
 
 // ── Event Bindings ──
 
+// ═══════════════════════════════════
+// Morph Step Cards (dynamic UI)
+// ═══════════════════════════════════
+
+function renderMorphStepCards(L) {
+    let container = document.getElementById('morphStepList');
+    container.innerHTML = '';
+    let defs = L.morphStepDefs || [];
+
+    for (let si = 0; si < defs.length; si++) {
+        let def = defs[si];
+        let card = document.createElement('div');
+        card.className = 'morph-step-card';
+
+        // Font options HTML
+        let fontOpts = FONT_OPTIONS.map(f =>
+            '<option value="' + f.value + '"' + (f.value === def.fontFamily ? ' selected' : '') + '>' + f.label + '</option>'
+        ).join('');
+
+        card.innerHTML =
+            '<div class="step-header">' +
+            '<span class="step-label">STEP ' + (si + 1) + '</span>' +
+            '<button class="step-del-btn" data-si="' + si + '">\u2715</button>' +
+            '</div>' +
+            '<textarea rows="1" class="step-text" data-si="' + si + '" spellcheck="false">' + (def.text || '') + '</textarea>' +
+            '<div class="step-row">' +
+            '<div class="field"><select class="step-font" data-si="' + si + '">' + fontOpts + '</select></div>' +
+            '<div class="field"><div class="toggle-group">' +
+            '<button class="toggle-btn step-weight-btn' + (def.fontWeight === '400' ? ' active' : '') + '" data-si="' + si + '" data-w="400">Rg</button>' +
+            '<button class="toggle-btn step-weight-btn' + (def.fontWeight === '700' ? ' active' : '') + '" data-si="' + si + '" data-w="700">Bd</button>' +
+            '<button class="toggle-btn step-weight-btn' + (def.fontWeight === '900' ? ' active' : '') + '" data-si="' + si + '" data-w="900">Bk</button>' +
+            '</div></div>' +
+            '</div>';
+
+        container.appendChild(card);
+    }
+
+    // Bind events on newly created elements
+    container.querySelectorAll('.step-text').forEach(el => {
+        el.addEventListener('input', () => {
+            let L = activeLayer(); if (!L) return;
+            L.morphStepDefs[parseInt(el.dataset.si)].text = el.value;
+            debouncedGenerate(L);
+        });
+    });
+    container.querySelectorAll('.step-font').forEach(el => {
+        el.addEventListener('change', () => {
+            let L = activeLayer(); if (!L) return;
+            L.morphStepDefs[parseInt(el.dataset.si)].fontFamily = el.value;
+            generateLayerTiles(L);
+        });
+    });
+    container.querySelectorAll('.step-weight-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            let L = activeLayer(); if (!L) return;
+            let si = parseInt(btn.dataset.si);
+            L.morphStepDefs[si].fontWeight = btn.dataset.w;
+            // Update toggle UI within this step only
+            btn.parentElement.querySelectorAll('.step-weight-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            generateLayerTiles(L);
+        });
+    });
+    container.querySelectorAll('.step-del-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            let L = activeLayer(); if (!L) return;
+            let si = parseInt(btn.dataset.si);
+            L.morphStepDefs.splice(si, 1);
+            renderMorphStepCards(L);
+            generateLayerTiles(L);
+        });
+    });
+}
+
+function addMorphStep() {
+    let L = activeLayer(); if (!L) return;
+    L.morphStepDefs.push({
+        text: '',
+        fontFamily: L.fontFamily,
+        fontWeight: L.fontWeight
+    });
+    renderMorphStepCards(L);
+}
+
 function bindGlobalEvents() {
     document.getElementById('convertBtn').addEventListener('click', convertAll);
     document.getElementById('resizeBtn').addEventListener('click', updateCanvas);
@@ -166,6 +246,7 @@ function bindGlobalEvents() {
     document.getElementById('closeFullscreen').addEventListener('click', exitFullscreen);
     document.getElementById('imageInput').addEventListener('change', handleImage);
     document.getElementById('addLayerBtn').addEventListener('click', () => addLayer());
+    document.getElementById('addMorphStepBtn').addEventListener('click', addMorphStep);
 
     document.getElementById('bgColor').addEventListener('input', markGradientDirty);
     document.getElementById('bgColor2').addEventListener('input', markGradientDirty);
@@ -230,12 +311,6 @@ function bindLayerSettingsEvents() {
         debouncedGenerate(L);
         updateLayerListUI();
     });
-    document.getElementById('layerMorphText').addEventListener('input', () => {
-        let L = activeLayer(); if (!L) return;
-        L.morphText = document.getElementById('layerMorphText').value || 'B';
-        debouncedGenerate(L);
-    });
-
     document.getElementById('layerFont').addEventListener('change', e => {
         let L = activeLayer(); if (!L) return;
         L.fontFamily = e.target.value;
@@ -247,22 +322,6 @@ function bindLayerSettingsEvents() {
             let L = activeLayer(); if (!L) return;
             L.fontWeight = btn.dataset.weight;
             document.querySelectorAll('.weight-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            generateLayerTiles(L);
-        });
-    });
-
-    document.getElementById('layerMorphFont').addEventListener('change', e => {
-        let L = activeLayer(); if (!L) return;
-        L.morphFontFamily = e.target.value;
-        generateLayerTiles(L);
-    });
-
-    document.querySelectorAll('.morph-weight-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            let L = activeLayer(); if (!L) return;
-            L.morphFontWeight = btn.dataset.weight;
-            document.querySelectorAll('.morph-weight-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             generateLayerTiles(L);
         });
