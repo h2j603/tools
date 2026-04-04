@@ -812,6 +812,48 @@ kbd {
     color: var(--text-1);
 }
 
+/* ─── Tool Navigation Link ─── */
+.tool-nav-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    text-decoration: none;
+    color: var(--text-1);
+    transition: all var(--tr);
+    flex-shrink: 0;
+}
+
+.tool-nav-link:hover {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+}
+
+.tool-nav-icon { font-size: 18px; flex-shrink: 0; }
+
+.tool-nav-text {
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-2);
+    line-height: 1.4;
+}
+
+.tool-nav-text strong {
+    color: var(--text-1);
+    font-weight: 700;
+}
+
+.tool-nav-arrow {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: var(--text-3);
+    flex-shrink: 0;
+}
+
 /* ─── Animations ─── */
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(3px); }

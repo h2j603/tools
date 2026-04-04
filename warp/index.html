@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Image Text Warp</title>
+    <meta name="description" content="이미지를 왜곡하여 텍스트 형태가 드러나게 하는 크리에이티브 도구">
+    <meta name="theme-color" content="#0a0a0c">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌀</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@400;700;900&family=Black+Han+Sans&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <div id="canvas-area">
+            <div id="canvas-container"></div>
+            <div id="canvas-info">
+                <span id="canvasInfoText">1080 x 1080</span>
+            </div>
+        </div>
+
+        <section id="controls">
+            <div class="scroll-container">
+
+                <!-- Quick Actions -->
+                <div class="quick-actions">
+                    <label for="imageInput" class="btn-action upload-btn" tabindex="0" role="button">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1V10M3 5L7 1L11 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 10V12C1 12.5523 1.44772 13 2 13H12C12.5523 13 13 12.5523 13 12V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                        PHOTO
+                    </label>
+                    <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp,image/gif">
+                    <button id="applyBtn" class="btn-action primary">APPLY</button>
+                    <button id="themeToggle" class="btn-action" title="테마 전환" style="flex:0 0 36px; padding:8px 0">
+                        <span id="themeIcon">☀</span>
+                    </button>
+                </div>
+
+                <a href="../" class="tool-nav-link">
+                    <span class="tool-nav-icon">🔲</span>
+                    <span class="tool-nav-text"><strong>Text Mosaic</strong> — 텍스트로 이미지를 구성</span>
+                    <span class="tool-nav-arrow">→</span>
+                </a>
+
+                <!-- TEXT -->
+                <details class="section-collapsible" open>
+                    <summary class="section-toggle"><h2>TEXT</h2></summary>
+                    <div class="section-body">
+                        <div class="field">
+                            <label for="warpText">TEXT</label>
+                            <textarea id="warpText" rows="1" spellcheck="false" placeholder="텍스트 입력...">WARP</textarea>
+                        </div>
+                        <div class="row-2">
+                            <div class="field">
+                                <label for="fontSelect">FONT</label>
+                                <select id="fontSelect">
+                                    <option value="'Black Han Sans', sans-serif" selected>블랙한산스</option>
+                                    <option value="'Noto Sans KR', sans-serif">Noto Sans KR</option>
+                                    <option value="'Noto Serif KR', serif">Noto Serif KR</option>
+                                    <option value="sans-serif">Sans-serif</option>
+                                    <option value="serif">Serif</option>
+                                    <option value="'JetBrains Mono', monospace">Monospace</option>
+                                    <option value="Georgia, serif">Georgia</option>
+                                    <option value="Impact, sans-serif">Impact</option>
+                                </select>
+                            </div>
+                            <div class="field">
+                                <label>WEIGHT</label>
+                                <div class="toggle-group">
+                                    <button class="toggle-btn weight-btn" data-weight="400">Rg</button>
+                                    <button class="toggle-btn weight-btn active" data-weight="700">Bd</button>
+                                    <button class="toggle-btn weight-btn" data-weight="900">Bk</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row-2">
+                            <div class="field">
+                                <label for="textSize">SIZE <span class="val" id="textSizeVal">40</span>%</label>
+                                <input type="range" id="textSize" min="5" max="100" value="40">
+                            </div>
+                            <div class="field">
+                                <label for="textLetterSpace">SPACING <span class="val" id="textLetterSpaceVal">0</span></label>
+                                <input type="range" id="textLetterSpace" min="-30" max="60" value="0">
+                            </div>
+                        </div>
+                        <div class="row-2">
+                            <div class="field">
+                                <label for="textX">X <span class="val" id="textXVal">50</span>%</label>
+                                <input type="range" id="textX" min="0" max="100" value="50">
+                            </div>
+                            <div class="field">
+                                <label for="textY">Y <span class="val" id="textYVal">50</span>%</label>
+                                <input type="range" id="textY" min="0" max="100" value="50">
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- WARP EFFECT -->
+                <details class="section-collapsible" open>
+                    <summary class="section-toggle"><h2>WARP EFFECT</h2></summary>
+                    <div class="section-body">
+                        <div class="toggle-group">
+                            <button class="toggle-btn mode-btn active" data-mode="displace">DISPLACE</button>
+                            <button class="toggle-btn mode-btn" data-mode="focus">FOCUS</button>
+                            <button class="toggle-btn mode-btn" data-mode="scatter">SCATTER</button>
+                        </div>
+                        <div class="toggle-group">
+                            <button class="toggle-btn mode-btn" data-mode="density">DENSITY</button>
+                            <button class="toggle-btn mode-btn" data-mode="wave">WAVE</button>
+                            <button class="toggle-btn mode-btn" data-mode="shatter">SHATTER</button>
+                        </div>
+                        <div class="row-2">
+                            <div class="field">
+                                <label for="intensity">INTENSITY <span class="val" id="intensityVal">50</span>%</label>
+                                <input type="range" id="intensity" min="0" max="100" value="50">
+                            </div>
+                            <div class="field">
+                                <label for="edgeSoftness">EDGE <span class="val" id="edgeSoftnessVal">30</span>%</label>
+                                <input type="range" id="edgeSoftness" min="0" max="100" value="30">
+                            </div>
+                        </div>
+                        <div class="row-2">
+                            <div class="field">
+                                <label for="detail">DETAIL <span class="val" id="detailVal">50</span>%</label>
+                                <input type="range" id="detail" min="1" max="100" value="50">
+                            </div>
+                            <div class="field">
+                                <label for="seed">SEED <span class="val" id="seedVal">0</span></label>
+                                <input type="range" id="seed" min="0" max="999" value="0">
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- COLOR -->
+                <details class="section-collapsible">
+                    <summary class="section-toggle"><h2>COLOR</h2></summary>
+                    <div class="section-body">
+                        <div class="row-2">
+                            <div class="field">
+                                <label>INSIDE</label>
+                                <div class="toggle-group">
+                                    <button class="toggle-btn inside-color-btn active" data-color="original">ORIG</button>
+                                    <button class="toggle-btn inside-color-btn" data-color="bright">BRIGHT</button>
+                                    <button class="toggle-btn inside-color-btn" data-color="saturate">VIVID</button>
+                                </div>
+                            </div>
+                            <div class="field">
+                                <label>OUTSIDE</label>
+                                <div class="toggle-group">
+                                    <button class="toggle-btn outside-color-btn active" data-color="original">ORIG</button>
+                                    <button class="toggle-btn outside-color-btn" data-color="grayscale">GRAY</button>
+                                    <button class="toggle-btn outside-color-btn" data-color="dark">DARK</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row-2">
+                            <div class="field">
+                                <label for="bgColor">BG COLOR</label>
+                                <input type="color" id="bgColor" value="#0a0a0c">
+                            </div>
+                            <div class="field">
+                                <label for="bgOpacity">BG OPACITY <span class="val" id="bgOpacityVal">0</span>%</label>
+                                <input type="range" id="bgOpacity" min="0" max="100" value="0">
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- ANIMATE -->
+                <details class="section-collapsible">
+                    <summary class="section-toggle"><h2>ANIMATE</h2></summary>
+                    <div class="section-body">
+                        <div class="toggle-group">
+                            <button class="toggle-btn anim-btn" data-anim="none">OFF</button>
+                            <button class="toggle-btn anim-btn active" data-anim="none">NONE</button>
+                        </div>
+                        <div class="toggle-group">
+                            <button class="toggle-btn anim-btn" data-anim="breathe">BREATHE</button>
+                            <button class="toggle-btn anim-btn" data-anim="glitch">GLITCH</button>
+                            <button class="toggle-btn anim-btn" data-anim="pulse-wave">PULSE</button>
+                        </div>
+                        <div class="field">
+                            <label for="animSpeed">SPEED <span class="val" id="animSpeedVal">1.0</span>x</label>
+                            <input type="range" id="animSpeed" min="0.1" max="5" value="1" step="0.1">
+                        </div>
+                    </div>
+                </details>
+
+                <!-- EXPORT -->
+                <details class="section-collapsible">
+                    <summary class="section-toggle"><h2>EXPORT</h2></summary>
+                    <div class="section-body">
+                        <div class="row-2">
+                            <div class="field">
+                                <label for="canvasW">W</label>
+                                <input type="number" id="canvasW" value="1080" min="100" max="3840">
+                            </div>
+                            <div class="field">
+                                <label for="canvasH">H</label>
+                                <input type="number" id="canvasH" value="1080" min="100" max="3840">
+                            </div>
+                            <button id="resizeBtn" class="btn-sm">SET</button>
+                        </div>
+                        <div class="canvas-presets">
+                            <button class="preset-btn" data-w="1080" data-h="1080">1:1</button>
+                            <button class="preset-btn" data-w="1080" data-h="1350">4:5</button>
+                            <button class="preset-btn" data-w="1080" data-h="1920">9:16</button>
+                            <button class="preset-btn" data-w="1920" data-h="1080">16:9</button>
+                        </div>
+                        <div class="toggle-group">
+                            <button class="toggle-btn scale-btn active" data-scale="1">1x</button>
+                            <button class="toggle-btn scale-btn" data-scale="2">2x</button>
+                            <button class="toggle-btn scale-btn" data-scale="4">4x</button>
+                        </div>
+                        <div class="row-2">
+                            <button id="savePngBtn" class="btn-action">PNG</button>
+                            <button id="saveTransBtn" class="btn-action">TRANSPARENT</button>
+                        </div>
+                    </div>
+                </details>
+
+                <p id="status" class="status-msg" role="status">사진을 올리고 APPLY</p>
+                <div class="safe-bottom"></div>
+            </div>
+        </section>
+    </div>
+
+    <script src="sketch.js"></script>
+</body>
+</html>
