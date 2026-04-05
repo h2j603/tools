@@ -26,6 +26,7 @@ const S = {
     edgeGlow: 15,
     edgeNoise: 20,  // edge pixel artifact intensity
     bloomRadius: 8, // glow spread distance
+    edgeSmooth: 0,  // 0=sharp pixel edges, higher=rounder edges
     // Region
     invert: false,
     // View
@@ -400,6 +401,42 @@ function render(time) {
         quantized[i] = q;
     }
 
+    // 3.5. Edge smooth: blur quantized map → re-quantize (rounds corners)
+    if (S.edgeSmooth > 0) {
+        const r = S.edgeSmooth;
+        // Convert quantized to float
+        const fmap = new Float32Array(w * h);
+        for (let i = 0; i < w * h; i++) fmap[i] = quantized[i];
+        // Horizontal blur
+        const tmp = new Float32Array(w * h);
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                let sum = 0, cnt = 0;
+                for (let kx = -r; kx <= r; kx++) {
+                    const nx = Math.max(0, Math.min(w - 1, x + kx));
+                    sum += fmap[y * w + nx]; cnt++;
+                }
+                tmp[y * w + x] = sum / cnt;
+            }
+        }
+        // Vertical blur
+        const smoothed = new Float32Array(w * h);
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                let sum = 0, cnt = 0;
+                for (let ky = -r; ky <= r; ky++) {
+                    const ny = Math.max(0, Math.min(h - 1, y + ky));
+                    sum += tmp[ny * w + x]; cnt++;
+                }
+                smoothed[y * w + x] = sum / cnt;
+            }
+        }
+        // Re-quantize
+        for (let i = 0; i < w * h; i++) {
+            quantized[i] = Math.max(0, Math.min(levels - 1, Math.round(smoothed[i])));
+        }
+    }
+
     // 4. Color mapping
     const cLow = hexToRGB(S.colorLow);
     const cMid = hexToRGB(S.colorMid);
@@ -657,13 +694,15 @@ function syncUIFromState() {
         'threshold': 'threshold', 'preBlur': 'preBlur', 'levels': 'levels',
         'intensity': 'threshold', 'detail': 'levels', 'seed': 'seed',
         'brightness': 'brightness', 'contrast': 'contrast', 'saturation': 'saturation',
-        'grain': 'grain', 'edgeGlow': 'edgeGlow', 'edgeNoise': 'edgeNoise',
+        'grain': 'grain', 'edgeSmooth': 'edgeSmooth',
+        'edgeGlow': 'edgeGlow', 'edgeNoise': 'edgeNoise',
         'bloomRadius': 'bloomRadius', 'animSpeed': 'animSpeed',
     };
     const valMap = {
         'threshold': 'thresholdVal', 'preBlur': 'preBlurVal', 'levels': 'levelsVal',
         'brightness': 'brightnessVal', 'contrast': 'contrastVal', 'saturation': 'saturationVal',
-        'grain': 'grainVal', 'edgeGlow': 'edgeGlowVal', 'edgeNoise': 'edgeNoiseVal',
+        'grain': 'grainVal', 'edgeSmooth': 'edgeSmoothVal',
+        'edgeGlow': 'edgeGlowVal', 'edgeNoise': 'edgeNoiseVal',
         'bloomRadius': 'bloomRadiusVal', 'animSpeed': 'animSpeedVal',
     };
     Object.keys(valMap).forEach(elId => {
@@ -693,6 +732,7 @@ function randomizeParams() {
     S.contrast = Math.floor(Math.random() * 40);
     S.saturation = Math.floor(Math.random() * 80 - 20);
     S.grain = Math.floor(Math.random() * 25);
+    S.edgeSmooth = Math.floor(Math.random() * 10);
     S.edgeGlow = 5 + Math.floor(Math.random() * 30);
     S.edgeNoise = 5 + Math.floor(Math.random() * 35);
     S.bloomRadius = 3 + Math.floor(Math.random() * 15);
@@ -792,6 +832,7 @@ function bindUI() {
         ['contrast', 'contrast', 'contrastVal'],
         ['saturation', 'saturation', 'saturationVal'],
         ['grain', 'grain', 'grainVal'],
+        ['edgeSmooth', 'edgeSmooth', 'edgeSmoothVal'],
         ['edgeGlow', 'edgeGlow', 'edgeGlowVal'],
         ['edgeNoise', 'edgeNoise', 'edgeNoiseVal'],
         ['bloomRadius', 'bloomRadius', 'bloomRadiusVal'],
