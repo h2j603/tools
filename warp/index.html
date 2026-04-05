@@ -192,6 +192,47 @@
                     </div>
                 </details>
 
+                <!-- STYLIZE -->
+                <details class="section-collapsible">
+                    <summary class="section-toggle"><h2>STYLIZE</h2></summary>
+                    <div class="section-body">
+                        <div class="row-2">
+                            <div class="field">
+                                <label for="edgeDetect">CONTOUR <span class="val" id="edgeDetectVal">0</span>%</label>
+                                <input type="range" id="edgeDetect" min="0" max="100" value="0">
+                            </div>
+                            <div class="field">
+                                <label for="edgeColor">OUTLINE</label>
+                                <input type="color" id="edgeColor" value="#00ffaa">
+                            </div>
+                        </div>
+                        <div class="row-2">
+                            <div class="field">
+                                <label for="emboss">EMBOSS <span class="val" id="embossVal">0</span>%</label>
+                                <input type="range" id="emboss" min="0" max="100" value="0">
+                            </div>
+                            <div class="field">
+                                <label for="pixelate">PIXELATE <span class="val" id="pixelateVal">0</span></label>
+                                <input type="range" id="pixelate" min="0" max="40" value="0">
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="vignette">VIGNETTE <span class="val" id="vignetteVal">0</span>%</label>
+                            <input type="range" id="vignette" min="0" max="100" value="0">
+                        </div>
+                        <div class="field">
+                            <label>INVERT</label>
+                            <div class="toggle-group">
+                                <button class="toggle-btn cinvert-btn active" data-cinvert="none">OFF</button>
+                                <button class="toggle-btn cinvert-btn" data-cinvert="full">ALL</button>
+                                <button class="toggle-btn cinvert-btn" data-cinvert="r">R</button>
+                                <button class="toggle-btn cinvert-btn" data-cinvert="g">G</button>
+                                <button class="toggle-btn cinvert-btn" data-cinvert="b">B</button>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
                 <!-- POST FX -->
                 <details class="section-collapsible">
                     <summary class="section-toggle"><h2>POST FX</h2></summary>

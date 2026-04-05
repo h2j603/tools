@@ -34,6 +34,13 @@ const S = {
     scanlineGap: 3,    // scanline spacing
     chromatic: 0,      // RGB channel offset px
     dither: 'none',    // none, ordered, atkinson
+    // More creative FX
+    edgeDetect: 0,     // 0=off, strength of Sobel edge detection
+    edgeColor: '#00ffaa', // neon outline color
+    vignette: 0,       // 0=off, darkening strength %
+    pixelate: 0,       // 0=off, block size
+    colorInvert: 'none', // none, full, r, g, b
+    emboss: 0,         // 0=off, strength
     // Region
     invert: false,
     // View
@@ -740,6 +747,104 @@ function render(time) {
         }
     }
 
+    // 14. Pixelate
+    if (S.pixelate > 1) {
+        const bs = S.pixelate;
+        for (let by = 0; by < h; by += bs) {
+            for (let bx = 0; bx < w; bx += bs) {
+                // Average color of block
+                let tr = 0, tg = 0, tb = 0, cnt = 0;
+                for (let dy = 0; dy < bs && by + dy < h; dy++) {
+                    for (let dx = 0; dx < bs && bx + dx < w; dx++) {
+                        const si = ((by + dy) * w + (bx + dx)) * 4;
+                        tr += out[si]; tg += out[si + 1]; tb += out[si + 2]; cnt++;
+                    }
+                }
+                tr = Math.round(tr / cnt); tg = Math.round(tg / cnt); tb = Math.round(tb / cnt);
+                for (let dy = 0; dy < bs && by + dy < h; dy++) {
+                    for (let dx = 0; dx < bs && bx + dx < w; dx++) {
+                        const di = ((by + dy) * w + (bx + dx)) * 4;
+                        out[di] = tr; out[di + 1] = tg; out[di + 2] = tb;
+                    }
+                }
+            }
+        }
+    }
+
+    // 15. Edge detect (Sobel) overlay
+    if (S.edgeDetect > 0) {
+        const str = S.edgeDetect / 100;
+        const ec = hexToRGB(S.edgeColor);
+        const edgeBuf = new Float32Array(w * h);
+        for (let y = 1; y < h - 1; y++) {
+            for (let x = 1; x < w - 1; x++) {
+                const idx = (i) => {
+                    const si = i * 4;
+                    return out[si] * 0.299 + out[si + 1] * 0.587 + out[si + 2] * 0.114;
+                };
+                const gx = -idx((y-1)*w+(x-1)) - 2*idx(y*w+(x-1)) - idx((y+1)*w+(x-1))
+                           +idx((y-1)*w+(x+1)) + 2*idx(y*w+(x+1)) + idx((y+1)*w+(x+1));
+                const gy = -idx((y-1)*w+(x-1)) - 2*idx((y-1)*w+x) - idx((y-1)*w+(x+1))
+                           +idx((y+1)*w+(x-1)) + 2*idx((y+1)*w+x) + idx((y+1)*w+(x+1));
+                edgeBuf[y * w + x] = Math.min(1, Math.sqrt(gx * gx + gy * gy) / 255 * str * 3);
+            }
+        }
+        for (let i = 0; i < w * h; i++) {
+            const e = edgeBuf[i];
+            if (e > 0.05) {
+                const di = i * 4;
+                out[di]     = Math.min(255, out[di]     * (1 - e) + ec[0] * e);
+                out[di + 1] = Math.min(255, out[di + 1] * (1 - e) + ec[1] * e);
+                out[di + 2] = Math.min(255, out[di + 2] * (1 - e) + ec[2] * e);
+            }
+        }
+    }
+
+    // 16. Emboss
+    if (S.emboss > 0) {
+        const str = S.emboss / 50;
+        const tempData = new Uint8ClampedArray(out);
+        for (let y = 1; y < h - 1; y++) {
+            for (let x = 1; x < w - 1; x++) {
+                const di = (y * w + x) * 4;
+                for (let c = 0; c < 3; c++) {
+                    const val = 128
+                        + (tempData[((y+1)*w+(x+1))*4+c] - tempData[((y-1)*w+(x-1))*4+c]) * str
+                        + (tempData[(y*w+(x+1))*4+c] - tempData[(y*w+(x-1))*4+c]) * str * 0.5;
+                    out[di + c] = Math.max(0, Math.min(255, val));
+                }
+            }
+        }
+    }
+
+    // 17. Color invert
+    if (S.colorInvert !== 'none') {
+        for (let i = 0; i < w * h * 4; i += 4) {
+            if (S.colorInvert === 'full' || S.colorInvert === 'r') out[i] = 255 - out[i];
+            if (S.colorInvert === 'full' || S.colorInvert === 'g') out[i + 1] = 255 - out[i + 1];
+            if (S.colorInvert === 'full' || S.colorInvert === 'b') out[i + 2] = 255 - out[i + 2];
+        }
+    }
+
+    // 18. Vignette
+    if (S.vignette > 0) {
+        const str = S.vignette / 100;
+        const cx = w / 2, cy = h / 2;
+        const maxDist = Math.sqrt(cx * cx + cy * cy);
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                const dx = x - cx, dy = y - cy;
+                const dist = Math.sqrt(dx * dx + dy * dy) / maxDist;
+                const v = dist * dist * str;
+                const darken = Math.max(0, 1 - v);
+                const di = (y * w + x) * 4;
+                out[di]     = Math.round(out[di] * darken);
+                out[di + 1] = Math.round(out[di + 1] * darken);
+                out[di + 2] = Math.round(out[di + 2] * darken);
+            }
+        }
+    }
+
     S.ctx.putImageData(outImageData, 0, 0);
 }
 
@@ -831,7 +936,10 @@ function syncUIFromState() {
         'bloomRadius': 'bloomRadiusVal',
         'halftone': 'halftoneVal', 'halftoneAngle': 'halftoneAngleVal',
         'scanline': 'scanlineVal', 'scanlineGap': 'scanlineGapVal',
-        'chromatic': 'chromaticVal', 'animSpeed': 'animSpeedVal',
+        'chromatic': 'chromaticVal',
+        'edgeDetect': 'edgeDetectVal', 'emboss': 'embossVal',
+        'pixelate': 'pixelateVal', 'vignette': 'vignetteVal',
+        'animSpeed': 'animSpeedVal',
     };
     Object.keys(valMap).forEach(elId => {
         const el = document.getElementById(elId);
@@ -847,6 +955,9 @@ function syncUIFromState() {
     document.querySelectorAll('.invert-btn').forEach(b => b.classList.toggle('active', (b.dataset.invert === 'true') === S.invert));
     document.querySelectorAll('.anim-btn').forEach(b => b.classList.toggle('active', b.dataset.anim === S.anim));
     document.querySelectorAll('.dither-btn').forEach(b => b.classList.toggle('active', b.dataset.dither === S.dither));
+    document.querySelectorAll('.cinvert-btn').forEach(b => b.classList.toggle('active', b.dataset.cinvert === S.colorInvert));
+    const ecEl = document.getElementById('edgeColor');
+    if (ecEl) ecEl.value = S.edgeColor;
 }
 
 function randomizeParams() {
@@ -868,6 +979,13 @@ function randomizeParams() {
     S.scanlineGap = 2 + Math.floor(Math.random() * 6);
     S.chromatic = Math.random() > 0.5 ? 2 + Math.floor(Math.random() * 10) : 0;
     S.dither = ['none','none','ordered','atkinson'][Math.floor(Math.random() * 4)];
+    S.edgeDetect = Math.random() > 0.6 ? 20 + Math.floor(Math.random() * 60) : 0;
+    const rc2 = () => '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+    S.edgeColor = rc2();
+    S.emboss = Math.random() > 0.7 ? 20 + Math.floor(Math.random() * 50) : 0;
+    S.pixelate = Math.random() > 0.6 ? 2 + Math.floor(Math.random() * 15) : 0;
+    S.vignette = Math.random() > 0.5 ? 20 + Math.floor(Math.random() * 60) : 0;
+    S.colorInvert = ['none','none','none','full','r','g','b'][Math.floor(Math.random() * 7)];
     S.edgeGlow = 5 + Math.floor(Math.random() * 30);
     S.edgeNoise = 5 + Math.floor(Math.random() * 35);
     S.bloomRadius = 3 + Math.floor(Math.random() * 15);
@@ -976,6 +1094,10 @@ function bindUI() {
         ['scanline', 'scanline', 'scanlineVal'],
         ['scanlineGap', 'scanlineGap', 'scanlineGapVal'],
         ['chromatic', 'chromatic', 'chromaticVal'],
+        ['edgeDetect', 'edgeDetect', 'edgeDetectVal'],
+        ['emboss', 'emboss', 'embossVal'],
+        ['pixelate', 'pixelate', 'pixelateVal'],
+        ['vignette', 'vignette', 'vignetteVal'],
         ['animSpeed', 'animSpeed', 'animSpeedVal'],
     ];
     sliders.forEach(([id, key, valId]) => {
@@ -999,6 +1121,11 @@ function bindUI() {
     bindToggleGroup('.channel-btn', (btn) => { S.channel = btn.dataset.channel; scheduleRender(); });
     bindToggleGroup('.mix-btn', (btn) => { S.mixMode = btn.dataset.mix; scheduleRender(); });
     bindToggleGroup('.dither-btn', (btn) => { S.dither = btn.dataset.dither; scheduleRender(); });
+    bindToggleGroup('.cinvert-btn', (btn) => { S.colorInvert = btn.dataset.cinvert; scheduleRender(); });
+
+    // Edge color
+    const edgeColorEl = document.getElementById('edgeColor');
+    if (edgeColorEl) edgeColorEl.addEventListener('input', (e) => { S.edgeColor = e.target.value; scheduleRender(); });
     bindToggleGroup('.invert-btn', (btn) => { S.invert = btn.dataset.invert === 'true'; scheduleRender(); });
     bindToggleGroup('.anim-btn', (btn) => {
         S.anim = btn.dataset.anim;
