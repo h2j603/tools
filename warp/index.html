@@ -153,6 +153,45 @@
                     </div>
                 </details>
 
+                <!-- CREATIVE FX -->
+                <details class="section-collapsible">
+                    <summary class="section-toggle"><h2>CREATIVE FX</h2></summary>
+                    <div class="section-body">
+                        <div class="row-2">
+                            <div class="field">
+                                <label for="halftone">HALFTONE <span class="val" id="halftoneVal">0</span></label>
+                                <input type="range" id="halftone" min="0" max="20" value="0">
+                            </div>
+                            <div class="field">
+                                <label for="halftoneAngle">ANGLE <span class="val" id="halftoneAngleVal">0</span>°</label>
+                                <input type="range" id="halftoneAngle" min="0" max="90" value="0">
+                            </div>
+                        </div>
+                        <div class="row-2">
+                            <div class="field">
+                                <label for="scanline">SCANLINE <span class="val" id="scanlineVal">0</span>%</label>
+                                <input type="range" id="scanline" min="0" max="100" value="0">
+                            </div>
+                            <div class="field">
+                                <label for="scanlineGap">LINE GAP <span class="val" id="scanlineGapVal">3</span></label>
+                                <input type="range" id="scanlineGap" min="2" max="10" value="3">
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="chromatic">RGB SPLIT <span class="val" id="chromaticVal">0</span>px</label>
+                            <input type="range" id="chromatic" min="0" max="30" value="0">
+                        </div>
+                        <div class="field">
+                            <label>DITHER</label>
+                            <div class="toggle-group">
+                                <button class="toggle-btn dither-btn active" data-dither="none">OFF</button>
+                                <button class="toggle-btn dither-btn" data-dither="ordered">ORDERED</button>
+                                <button class="toggle-btn dither-btn" data-dither="atkinson">ATKINSON</button>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
                 <!-- POST FX -->
                 <details class="section-collapsible">
                     <summary class="section-toggle"><h2>POST FX</h2></summary>

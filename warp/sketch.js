@@ -27,6 +27,13 @@ const S = {
     edgeNoise: 20,  // edge pixel artifact intensity
     bloomRadius: 8, // glow spread distance
     edgeSmooth: 0,  // 0=sharp pixel edges, higher=rounder edges
+    // Creative FX
+    halftone: 0,       // 0=off, dot size (2-20)
+    halftoneAngle: 0,  // dot grid rotation
+    scanline: 0,       // 0=off, intensity %
+    scanlineGap: 3,    // scanline spacing
+    chromatic: 0,      // RGB channel offset px
+    dither: 'none',    // none, ordered, atkinson
     // Region
     invert: false,
     // View
@@ -615,6 +622,124 @@ function render(time) {
         }
     }
 
+    // 10. Ordered dither
+    if (S.dither === 'ordered') {
+        const bayer4 = [0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5];
+        const dScale = 16;
+        for (let i = 0; i < w * h; i++) {
+            const x = i % w, y = (i / w) | 0;
+            const bx = x & 3, by = y & 3;
+            const threshold = (bayer4[by * 4 + bx] / 16 - 0.5) * dScale;
+            const si = i * 4;
+            out[si]     = Math.max(0, Math.min(255, out[si]     + threshold));
+            out[si + 1] = Math.max(0, Math.min(255, out[si + 1] + threshold));
+            out[si + 2] = Math.max(0, Math.min(255, out[si + 2] + threshold));
+        }
+    } else if (S.dither === 'atkinson') {
+        // Atkinson dithering (error diffusion)
+        const buf = new Float32Array(w * h * 3);
+        for (let i = 0; i < w * h; i++) {
+            buf[i * 3]     = out[i * 4];
+            buf[i * 3 + 1] = out[i * 4 + 1];
+            buf[i * 3 + 2] = out[i * 4 + 2];
+        }
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                const i = y * w + x;
+                for (let c = 0; c < 3; c++) {
+                    const old = buf[i * 3 + c];
+                    const nw = old < 128 ? 0 : 255;
+                    buf[i * 3 + c] = nw;
+                    const err = (old - nw) / 8;
+                    const spread = [[1,0],[2,0],[-1,1],[0,1],[1,1],[0,2]];
+                    for (const [dx, dy] of spread) {
+                        const nx = x + dx, ny = y + dy;
+                        if (nx >= 0 && nx < w && ny < h) buf[(ny * w + nx) * 3 + c] += err;
+                    }
+                }
+            }
+        }
+        for (let i = 0; i < w * h; i++) {
+            out[i * 4]     = Math.max(0, Math.min(255, buf[i * 3]));
+            out[i * 4 + 1] = Math.max(0, Math.min(255, buf[i * 3 + 1]));
+            out[i * 4 + 2] = Math.max(0, Math.min(255, buf[i * 3 + 2]));
+        }
+    }
+
+    // 11. Halftone dots
+    if (S.halftone > 0) {
+        const dotR = S.halftone;
+        const spacing = dotR * 2.2;
+        const angle = S.halftoneAngle * Math.PI / 180;
+        const cosA = Math.cos(angle), sinA = Math.sin(angle);
+        // Sample color at grid centers, draw dots proportional to brightness
+        const tempData = new Uint8ClampedArray(out);
+        // Fill with darkest color from output
+        for (let i = 0; i < w * h * 4; i += 4) {
+            out[i] = 0; out[i + 1] = 0; out[i + 2] = 0; out[i + 3] = 255;
+        }
+        for (let gy = -spacing; gy < h + spacing; gy += spacing) {
+            for (let gx = -spacing; gx < w + spacing; gx += spacing) {
+                // Rotated grid
+                const cx = Math.round(gx * cosA - gy * sinA + w * 0.5 * (1 - cosA + sinA));
+                const cy = Math.round(gx * sinA + gy * cosA + h * 0.5 * (1 - sinA - cosA));
+                if (cx < -dotR || cx >= w + dotR || cy < -dotR || cy >= h + dotR) continue;
+                // Sample color at center
+                const sx = Math.max(0, Math.min(w - 1, cx));
+                const sy = Math.max(0, Math.min(h - 1, cy));
+                const si = (sy * w + sx) * 4;
+                const sr = tempData[si], sg = tempData[si + 1], sb = tempData[si + 2];
+                const lum = (sr * 0.299 + sg * 0.587 + sb * 0.114) / 255;
+                const radius = dotR * lum;
+                if (radius < 0.5) continue;
+                const r2 = radius * radius;
+                const ir = Math.ceil(radius);
+                for (let dy = -ir; dy <= ir; dy++) {
+                    for (let dx = -ir; dx <= ir; dx++) {
+                        if (dx * dx + dy * dy > r2) continue;
+                        const px = cx + dx, py = cy + dy;
+                        if (px >= 0 && px < w && py >= 0 && py < h) {
+                            const di = (py * w + px) * 4;
+                            out[di] = sr; out[di + 1] = sg; out[di + 2] = sb;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 12. Chromatic aberration (RGB offset)
+    if (S.chromatic > 0) {
+        const offset = S.chromatic;
+        const tempData = new Uint8ClampedArray(out);
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                const di = (y * w + x) * 4;
+                const rxR = Math.max(0, Math.min(w - 1, x - offset));
+                const rxB = Math.max(0, Math.min(w - 1, x + offset));
+                out[di]     = tempData[(y * w + rxR) * 4];     // R shifted left
+                // G stays
+                out[di + 2] = tempData[(y * w + rxB) * 4 + 2]; // B shifted right
+            }
+        }
+    }
+
+    // 13. Scanlines
+    if (S.scanline > 0) {
+        const intensity = S.scanline / 100;
+        const gap = Math.max(2, S.scanlineGap);
+        for (let y = 0; y < h; y++) {
+            if (y % gap === 0) {
+                for (let x = 0; x < w; x++) {
+                    const di = (y * w + x) * 4;
+                    out[di]     = Math.round(out[di]     * (1 - intensity));
+                    out[di + 1] = Math.round(out[di + 1] * (1 - intensity));
+                    out[di + 2] = Math.round(out[di + 2] * (1 - intensity));
+                }
+            }
+        }
+    }
+
     S.ctx.putImageData(outImageData, 0, 0);
 }
 
@@ -703,7 +828,10 @@ function syncUIFromState() {
         'brightness': 'brightnessVal', 'contrast': 'contrastVal', 'saturation': 'saturationVal',
         'grain': 'grainVal', 'edgeSmooth': 'edgeSmoothVal',
         'edgeGlow': 'edgeGlowVal', 'edgeNoise': 'edgeNoiseVal',
-        'bloomRadius': 'bloomRadiusVal', 'animSpeed': 'animSpeedVal',
+        'bloomRadius': 'bloomRadiusVal',
+        'halftone': 'halftoneVal', 'halftoneAngle': 'halftoneAngleVal',
+        'scanline': 'scanlineVal', 'scanlineGap': 'scanlineGapVal',
+        'chromatic': 'chromaticVal', 'animSpeed': 'animSpeedVal',
     };
     Object.keys(valMap).forEach(elId => {
         const el = document.getElementById(elId);
@@ -718,6 +846,7 @@ function syncUIFromState() {
     document.querySelectorAll('.mix-btn').forEach(b => b.classList.toggle('active', b.dataset.mix === S.mixMode));
     document.querySelectorAll('.invert-btn').forEach(b => b.classList.toggle('active', (b.dataset.invert === 'true') === S.invert));
     document.querySelectorAll('.anim-btn').forEach(b => b.classList.toggle('active', b.dataset.anim === S.anim));
+    document.querySelectorAll('.dither-btn').forEach(b => b.classList.toggle('active', b.dataset.dither === S.dither));
 }
 
 function randomizeParams() {
@@ -733,6 +862,12 @@ function randomizeParams() {
     S.saturation = Math.floor(Math.random() * 80 - 20);
     S.grain = Math.floor(Math.random() * 25);
     S.edgeSmooth = Math.floor(Math.random() * 10);
+    S.halftone = Math.random() > 0.6 ? 3 + Math.floor(Math.random() * 10) : 0;
+    S.halftoneAngle = Math.floor(Math.random() * 45);
+    S.scanline = Math.random() > 0.5 ? 20 + Math.floor(Math.random() * 50) : 0;
+    S.scanlineGap = 2 + Math.floor(Math.random() * 6);
+    S.chromatic = Math.random() > 0.5 ? 2 + Math.floor(Math.random() * 10) : 0;
+    S.dither = ['none','none','ordered','atkinson'][Math.floor(Math.random() * 4)];
     S.edgeGlow = 5 + Math.floor(Math.random() * 30);
     S.edgeNoise = 5 + Math.floor(Math.random() * 35);
     S.bloomRadius = 3 + Math.floor(Math.random() * 15);
@@ -836,6 +971,11 @@ function bindUI() {
         ['edgeGlow', 'edgeGlow', 'edgeGlowVal'],
         ['edgeNoise', 'edgeNoise', 'edgeNoiseVal'],
         ['bloomRadius', 'bloomRadius', 'bloomRadiusVal'],
+        ['halftone', 'halftone', 'halftoneVal'],
+        ['halftoneAngle', 'halftoneAngle', 'halftoneAngleVal'],
+        ['scanline', 'scanline', 'scanlineVal'],
+        ['scanlineGap', 'scanlineGap', 'scanlineGapVal'],
+        ['chromatic', 'chromatic', 'chromaticVal'],
         ['animSpeed', 'animSpeed', 'animSpeedVal'],
     ];
     sliders.forEach(([id, key, valId]) => {
@@ -858,6 +998,7 @@ function bindUI() {
     // Toggle groups
     bindToggleGroup('.channel-btn', (btn) => { S.channel = btn.dataset.channel; scheduleRender(); });
     bindToggleGroup('.mix-btn', (btn) => { S.mixMode = btn.dataset.mix; scheduleRender(); });
+    bindToggleGroup('.dither-btn', (btn) => { S.dither = btn.dataset.dither; scheduleRender(); });
     bindToggleGroup('.invert-btn', (btn) => { S.invert = btn.dataset.invert === 'true'; scheduleRender(); });
     bindToggleGroup('.anim-btn', (btn) => {
         S.anim = btn.dataset.anim;
