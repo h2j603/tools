@@ -23,7 +23,9 @@ const S = {
     contrast: 0,
     saturation: 30,
     grain: 5,
-    edgeGlow: 0,
+    edgeGlow: 15,
+    edgeNoise: 20,  // edge pixel artifact intensity
+    bloomRadius: 8, // glow spread distance
     // Region
     invert: false,
     // View
@@ -38,14 +40,14 @@ const S = {
 };
 
 const PRESETS = {
-    'blueprint': { threshold:50, channel:'luma', preBlur:3, levels:2, colorLow:'#3030ff', colorHigh:'#d0d0d0', mixMode:'flat', saturation:30, grain:5, contrast:10, edgeGlow:0 },
-    'noir': { threshold:50, channel:'luma', preBlur:2, levels:2, colorLow:'#000000', colorHigh:'#ffffff', mixMode:'flat', saturation:0, grain:15, contrast:20, edgeGlow:0 },
-    'thermal': { threshold:40, channel:'luma', preBlur:4, levels:4, colorLow:'#1a0a3e', colorMid:'#ff4400', colorHigh:'#ffff00', mixMode:'flat', saturation:40, grain:3, contrast:0, edgeGlow:5 },
-    'pop-art': { threshold:45, channel:'luma', preBlur:2, levels:3, colorLow:'#ff0066', colorMid:'#ffcc00', colorHigh:'#ffffff', mixMode:'flat', saturation:60, grain:0, contrast:30, edgeGlow:0 },
-    'xray': { threshold:55, channel:'luma', preBlur:5, levels:2, colorLow:'#000020', colorHigh:'#88ccff', mixMode:'flat', saturation:10, grain:8, contrast:15, edgeGlow:10 },
-    'solarize': { threshold:50, channel:'luma', preBlur:1, levels:6, colorLow:'#ff2200', colorMid:'#ffaa00', colorHigh:'#00ffaa', mixMode:'tint', saturation:50, grain:2, contrast:20, edgeGlow:3 },
-    'duotone-warm': { threshold:50, channel:'luma', preBlur:3, levels:2, colorLow:'#cc3300', colorHigh:'#ffddaa', mixMode:'flat', saturation:20, grain:5, contrast:10, edgeGlow:0 },
-    'retro-screen': { threshold:50, channel:'luma', preBlur:6, levels:3, colorLow:'#003322', colorMid:'#00aa66', colorHigh:'#88ffcc', mixMode:'flat', saturation:15, grain:20, contrast:5, edgeGlow:0 },
+    'blueprint': { threshold:50, channel:'luma', preBlur:3, levels:2, colorLow:'#3030ff', colorHigh:'#d0d0d0', mixMode:'flat', saturation:30, grain:5, contrast:10, edgeGlow:15, edgeNoise:20, bloomRadius:8 },
+    'noir': { threshold:50, channel:'luma', preBlur:2, levels:2, colorLow:'#000000', colorHigh:'#ffffff', mixMode:'flat', saturation:0, grain:15, contrast:20, edgeGlow:5, edgeNoise:15, bloomRadius:4 },
+    'thermal': { threshold:40, channel:'luma', preBlur:4, levels:4, colorLow:'#1a0a3e', colorMid:'#ff4400', colorHigh:'#ffff00', mixMode:'flat', saturation:40, grain:3, contrast:0, edgeGlow:20, edgeNoise:10, bloomRadius:10 },
+    'pop-art': { threshold:45, channel:'luma', preBlur:2, levels:3, colorLow:'#ff0066', colorMid:'#ffcc00', colorHigh:'#ffffff', mixMode:'flat', saturation:60, grain:0, contrast:30, edgeGlow:10, edgeNoise:25, bloomRadius:3 },
+    'xray': { threshold:55, channel:'luma', preBlur:5, levels:2, colorLow:'#000020', colorHigh:'#88ccff', mixMode:'flat', saturation:10, grain:8, contrast:15, edgeGlow:25, edgeNoise:15, bloomRadius:12 },
+    'solarize': { threshold:50, channel:'luma', preBlur:1, levels:6, colorLow:'#ff2200', colorMid:'#ffaa00', colorHigh:'#00ffaa', mixMode:'tint', saturation:50, grain:2, contrast:20, edgeGlow:8, edgeNoise:5, bloomRadius:5 },
+    'duotone-warm': { threshold:50, channel:'luma', preBlur:3, levels:2, colorLow:'#cc3300', colorHigh:'#ffddaa', mixMode:'flat', saturation:20, grain:5, contrast:10, edgeGlow:12, edgeNoise:18, bloomRadius:6 },
+    'retro-screen': { threshold:50, channel:'luma', preBlur:6, levels:3, colorLow:'#003322', colorMid:'#00aa66', colorHigh:'#88ffcc', mixMode:'flat', saturation:15, grain:20, contrast:5, edgeGlow:10, edgeNoise:20, bloomRadius:5 },
 };
 
 function init() {
@@ -281,19 +283,33 @@ function render(time) {
             b = (src[si + 2] * tintB) / 255;
         }
 
-        // 5. Edge glow
-        if (S.edgeGlow > 0) {
+        // 5. Edge pixel noise (dithering at boundaries)
+        if (S.edgeNoise > 0) {
             const x = i % w, y = (i / w) | 0;
-            let isEdge = false;
-            if (x > 0 && quantized[i - 1] !== q) isEdge = true;
-            else if (x < w - 1 && quantized[i + 1] !== q) isEdge = true;
-            else if (y > 0 && quantized[i - w] !== q) isEdge = true;
-            else if (y < h - 1 && quantized[i + w] !== q) isEdge = true;
-            if (isEdge) {
-                const glow = S.edgeGlow / 100;
-                r = r + (255 - r) * glow;
-                g = g + (255 - g) * glow;
-                b = b + (255 - b) * glow;
+            let isNearEdge = false;
+            // Check 2px neighborhood for level changes
+            for (let dy = -2; dy <= 2 && !isNearEdge; dy++) {
+                for (let dx = -2; dx <= 2 && !isNearEdge; dx++) {
+                    if (dx === 0 && dy === 0) continue;
+                    const nx = x + dx, ny = y + dy;
+                    if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+                        if (quantized[ny * w + nx] !== q) isNearEdge = true;
+                    }
+                }
+            }
+            if (isNearEdge) {
+                const nf = (S.edgeNoise / 100) * 80;
+                const n = (rng() - 0.5) * nf;
+                r += n; g += n; b += n;
+                // Random pixel swap with neighbor (artifact effect)
+                if (rng() < S.edgeNoise / 200) {
+                    const ox = Math.max(0, Math.min(w - 1, x + Math.round((rng() - 0.5) * 4)));
+                    const oy = Math.max(0, Math.min(h - 1, y + Math.round((rng() - 0.5) * 4)));
+                    const ni = (oy * w + ox) * 4;
+                    r = src[ni] * 0.5 + r * 0.5;
+                    g = src[ni + 1] * 0.5 + g * 0.5;
+                    b = src[ni + 2] * 0.5 + b * 0.5;
+                }
             }
         }
 
@@ -327,6 +343,72 @@ function render(time) {
         out[si + 1] = Math.max(0, Math.min(255, g));
         out[si + 2] = Math.max(0, Math.min(255, b));
         out[si + 3] = 255;
+    }
+
+    // 9. Bloom: spread glow from bright edges into dark regions
+    if (S.edgeGlow > 0 && S.bloomRadius > 0) {
+        // Build edge mask: pixels near level boundaries with high brightness
+        const edgeMask = new Float32Array(w * h);
+        for (let i = 0; i < w * h; i++) {
+            const x = i % w, y = (i / w) | 0;
+            const q = quantized[i];
+            let isEdge = false;
+            if (x > 0 && quantized[i - 1] !== q) isEdge = true;
+            else if (x < w - 1 && quantized[i + 1] !== q) isEdge = true;
+            else if (y > 0 && quantized[i - w] !== q) isEdge = true;
+            else if (y < h - 1 && quantized[i + w] !== q) isEdge = true;
+            if (isEdge) {
+                // Glow intensity based on pixel brightness
+                const si = i * 4;
+                const lum = (out[si] * 0.299 + out[si + 1] * 0.587 + out[si + 2] * 0.114) / 255;
+                edgeMask[i] = lum;
+            }
+        }
+
+        // Spread the edge glow using a fast blur on the mask
+        const bR = S.bloomRadius;
+        const glowStr = S.edgeGlow / 100;
+        const spread = new Float32Array(w * h);
+
+        // Horizontal spread
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                let sum = 0, cnt = 0;
+                for (let kx = -bR; kx <= bR; kx++) {
+                    const nx = Math.max(0, Math.min(w - 1, x + kx));
+                    const v = edgeMask[y * w + nx];
+                    if (v > 0) {
+                        const weight = 1 - Math.abs(kx) / (bR + 1);
+                        sum += v * weight;
+                        cnt += weight;
+                    }
+                }
+                spread[y * w + x] = cnt > 0 ? sum / cnt : 0;
+            }
+        }
+        // Vertical spread + apply
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                let sum = 0, cnt = 0;
+                for (let ky = -bR; ky <= bR; ky++) {
+                    const ny = Math.max(0, Math.min(h - 1, y + ky));
+                    const v = spread[ny * w + x];
+                    if (v > 0) {
+                        const weight = 1 - Math.abs(ky) / (bR + 1);
+                        sum += v * weight;
+                        cnt += weight;
+                    }
+                }
+                const glow = (cnt > 0 ? sum / cnt : 0) * glowStr;
+                if (glow > 0.01) {
+                    const di = (y * w + x) * 4;
+                    // Additive blend: push toward white
+                    out[di]     = Math.min(255, out[di]     + glow * 255 * 0.7);
+                    out[di + 1] = Math.min(255, out[di + 1] + glow * 255 * 0.7);
+                    out[di + 2] = Math.min(255, out[di + 2] + glow * 255 * 0.7);
+                }
+            }
+        }
     }
 
     S.ctx.putImageData(outImageData, 0, 0);
@@ -408,12 +490,14 @@ function syncUIFromState() {
         'threshold': 'threshold', 'preBlur': 'preBlur', 'levels': 'levels',
         'intensity': 'threshold', 'detail': 'levels', 'seed': 'seed',
         'brightness': 'brightness', 'contrast': 'contrast', 'saturation': 'saturation',
-        'grain': 'grain', 'edgeGlow': 'edgeGlow', 'animSpeed': 'animSpeed',
+        'grain': 'grain', 'edgeGlow': 'edgeGlow', 'edgeNoise': 'edgeNoise',
+        'bloomRadius': 'bloomRadius', 'animSpeed': 'animSpeed',
     };
     const valMap = {
         'threshold': 'thresholdVal', 'preBlur': 'preBlurVal', 'levels': 'levelsVal',
         'brightness': 'brightnessVal', 'contrast': 'contrastVal', 'saturation': 'saturationVal',
-        'grain': 'grainVal', 'edgeGlow': 'edgeGlowVal', 'animSpeed': 'animSpeedVal',
+        'grain': 'grainVal', 'edgeGlow': 'edgeGlowVal', 'edgeNoise': 'edgeNoiseVal',
+        'bloomRadius': 'bloomRadiusVal', 'animSpeed': 'animSpeedVal',
     };
     Object.keys(valMap).forEach(elId => {
         const el = document.getElementById(elId);
@@ -442,7 +526,9 @@ function randomizeParams() {
     S.contrast = Math.floor(Math.random() * 40);
     S.saturation = Math.floor(Math.random() * 80 - 20);
     S.grain = Math.floor(Math.random() * 25);
-    S.edgeGlow = Math.floor(Math.random() * 30);
+    S.edgeGlow = 5 + Math.floor(Math.random() * 30);
+    S.edgeNoise = 5 + Math.floor(Math.random() * 35);
+    S.bloomRadius = 3 + Math.floor(Math.random() * 15);
     // Random colors
     const rc = () => '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
     S.colorLow = rc(); S.colorMid = rc(); S.colorHigh = rc();
@@ -538,6 +624,8 @@ function bindUI() {
         ['saturation', 'saturation', 'saturationVal'],
         ['grain', 'grain', 'grainVal'],
         ['edgeGlow', 'edgeGlow', 'edgeGlowVal'],
+        ['edgeNoise', 'edgeNoise', 'edgeNoiseVal'],
+        ['bloomRadius', 'bloomRadius', 'bloomRadiusVal'],
         ['animSpeed', 'animSpeed', 'animSpeedVal'],
     ];
     sliders.forEach(([id, key, valId]) => {
