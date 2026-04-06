@@ -48,7 +48,9 @@ body, html {
     overflow: hidden;
 }
 
-/* ─── Canvas Area ─── */
+/* ─── Canvas Area ───
+   touch-action:none ONLY here so drawing works.
+   The controls panel keeps default touch-action for scrolling. */
 #canvas-area {
     flex: 1 1 0;
     min-height: 0;
@@ -58,11 +60,12 @@ body, html {
     justify-content: center;
     position: relative;
     overflow: hidden;
-    touch-action: none;
+    touch-action: none;          /* ← drawing surface: no browser gestures */
     cursor: crosshair;
 }
 
 #canvas-area.eraser-mode { cursor: none; }
+#canvas-area.select-mode { cursor: default; }
 #canvas-area.panning { cursor: grab; }
 #canvas-area.panning:active { cursor: grabbing; }
 
@@ -82,13 +85,10 @@ body, html {
     z-index: 10;
     display: none;
     transform: translate(-50%, -50%);
-    transition: width 0.1s ease, height 0.1s ease;
+    transition: width 0.08s, height 0.08s;
 }
-
-#canvas-area:hover #brushCursor,
-#canvas-area.drawing #brushCursor {
-    display: block;
-}
+#canvas-area:hover #brushCursor { display: block; }
+#canvas-area.select-mode #brushCursor { display: none; }
 
 #canvas-info {
     position: absolute;
@@ -120,32 +120,18 @@ body, html {
     align-items: center;
     justify-content: center;
 }
-
 #fullscreen-view.hidden { display: none; }
-
-#fullscreenCanvas {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-}
-
+#fullscreenCanvas { max-width: 100%; max-height: 100%; object-fit: contain; }
 .close-btn {
-    position: absolute;
-    top: 16px;
-    right: 16px;
-    width: 40px;
-    height: 40px;
-    background: rgba(0,0,0,0.6);
-    border: 1px solid var(--border);
-    color: var(--text-1);
-    border-radius: 50%;
-    cursor: pointer;
-    display: grid;
-    place-items: center;
-    backdrop-filter: blur(6px);
+    position: absolute; top: 16px; right: 16px;
+    width: 40px; height: 40px;
+    background: rgba(0,0,0,0.6); border: 1px solid var(--border);
+    color: var(--text-1); border-radius: 50%; cursor: pointer;
+    display: grid; place-items: center; backdrop-filter: blur(6px);
 }
 
-/* ─── Controls Panel ─── */
+/* ─── Controls Panel ───
+   touch-action:auto so scrolling works on mobile! */
 #controls {
     flex: 0 0 auto;
     max-height: 45dvh;
@@ -155,6 +141,7 @@ body, html {
     flex-direction: column;
     border-top: 1px solid var(--border);
     z-index: 100;
+    touch-action: auto;          /* ← allow normal scroll/touch in controls */
 }
 
 .scroll-container {
@@ -169,6 +156,7 @@ body, html {
     scrollbar-width: thin;
     scrollbar-color: var(--bg-3) transparent;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;    /* prevent pull-to-refresh */
 }
 
 .scroll-container::-webkit-scrollbar { width: 4px; }
@@ -220,44 +208,32 @@ body, html {
 }
 
 .tool-btn {
-    width: 36px;
-    height: 32px;
+    width: 36px; height: 32px;
     background: none;
     border: 1px solid transparent;
     color: var(--text-3);
     border-radius: var(--radius-sm);
     cursor: pointer;
-    display: grid;
-    place-items: center;
+    display: grid; place-items: center;
     transition: all var(--tr);
     padding: 0;
 }
-
 .tool-btn:hover { color: var(--text-1); background: var(--bg-3); }
 .tool-btn.active { color: var(--accent); border-color: var(--accent); background: var(--accent-dim); }
 
 .tool-separator {
-    width: 1px;
-    background: var(--border);
-    margin: 2px 4px;
-    flex-shrink: 0;
+    width: 1px; background: var(--border);
+    margin: 2px 4px; flex-shrink: 0;
 }
 
 /* ─── Tool Navigation ─── */
 .tool-nav-link {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    text-decoration: none;
-    color: var(--text-1);
-    transition: all var(--tr);
-    flex-shrink: 0;
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; background: var(--bg-2);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    text-decoration: none; color: var(--text-1);
+    transition: all var(--tr); flex-shrink: 0;
 }
-
 .tool-nav-link:hover { border-color: var(--accent); background: var(--accent-dim); }
 .tool-nav-icon { font-size: 18px; flex-shrink: 0; }
 .tool-nav-text { flex: 1; font-family: var(--font-mono); font-size: 10px; color: var(--text-2); line-height: 1.4; }
@@ -266,236 +242,140 @@ body, html {
 
 /* ─── Collapsible Sections ─── */
 .section-collapsible {
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    flex-shrink: 0;
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: var(--radius); flex-shrink: 0;
 }
-
 .section-collapsible[open] { border-color: var(--border-hover); }
 
 .section-toggle {
-    display: flex;
-    align-items: center;
-    padding: 9px 12px;
-    cursor: pointer;
-    user-select: none;
-    list-style: none;
-    gap: 8px;
+    display: flex; align-items: center; padding: 9px 12px;
+    cursor: pointer; user-select: none; list-style: none; gap: 8px;
 }
-
 .section-toggle::-webkit-details-marker { display: none; }
 .section-toggle::marker { content: ''; }
-
 .section-toggle h2 {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1.5px;
-    color: var(--text-2);
-    flex: 1;
+    font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+    letter-spacing: 1.5px; color: var(--text-2); flex: 1;
 }
-
 .section-toggle::before {
-    content: '\25B8';
-    font-size: 9px;
-    color: var(--text-3);
-    transition: transform var(--tr);
-    flex-shrink: 0;
+    content: '\25B8'; font-size: 9px; color: var(--text-3);
+    transition: transform var(--tr); flex-shrink: 0;
 }
-
 .section-collapsible[open] > .section-toggle::before { transform: rotate(90deg); }
 
 .section-body {
-    padding: 0 12px 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 7px;
+    padding: 0 12px 10px; display: flex;
+    flex-direction: column; gap: 7px;
+}
+
+/* ─── Hint text ─── */
+.hint-text {
+    font-size: 11px; color: var(--text-3); line-height: 1.5;
 }
 
 /* ─── Form Fields ─── */
 .field {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    flex: 1;
-    min-width: 0;
+    display: flex; flex-direction: column; gap: 4px;
+    flex: 1; min-width: 0;
 }
-
 .field label {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    color: var(--text-3);
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    display: flex;
-    align-items: center;
-    gap: 5px;
+    font-family: var(--font-mono); font-size: 9px; color: var(--text-3);
+    font-weight: 700; letter-spacing: 0.5px;
+    display: flex; align-items: center; gap: 5px;
 }
-
 .field label .val { color: var(--accent); font-weight: 400; }
-
 .row-2 { display: flex; gap: 8px; align-items: flex-end; }
 
 input[type="text"],
 input[type="number"],
 select {
-    background: var(--bg-0);
-    border: 1px solid var(--border);
-    color: var(--text-1);
-    padding: 8px 10px;
-    border-radius: var(--radius-sm);
-    font-size: 12px;
-    font-family: var(--font-sans);
-    width: 100%;
-    min-width: 0;
-    outline: none;
-    transition: border-color var(--tr);
+    background: var(--bg-0); border: 1px solid var(--border);
+    color: var(--text-1); padding: 8px 10px;
+    border-radius: var(--radius-sm); font-size: 12px;
+    font-family: var(--font-sans); width: 100%; min-width: 0;
+    outline: none; transition: border-color var(--tr);
 }
-
 input:focus { border-color: var(--accent); }
 
-/* ─── Range Slider ─── */
+/* ─── Range Slider (larger touch target) ─── */
 input[type="range"] {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 100%;
-    height: 4px;
-    background: var(--bg-3);
-    border-radius: 2px;
-    outline: none;
-    cursor: pointer;
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 6px;
+    background: var(--bg-3); border-radius: 3px;
+    outline: none; cursor: pointer;
+    margin: 4px 0;
 }
-
 input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 16px;
-    height: 16px;
-    background: var(--text-1);
-    border-radius: 50%;
-    border: 2px solid var(--bg-0);
-    cursor: pointer;
-    transition: background var(--tr);
+    width: 20px; height: 20px;
+    background: var(--text-1); border-radius: 50%;
+    border: 2px solid var(--bg-0); cursor: pointer;
 }
-
 input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent); }
-
 input[type="range"]::-moz-range-thumb {
-    width: 16px;
-    height: 16px;
-    background: var(--text-1);
-    border-radius: 50%;
-    border: 2px solid var(--bg-0);
-    cursor: pointer;
+    width: 20px; height: 20px;
+    background: var(--text-1); border-radius: 50%;
+    border: 2px solid var(--bg-0); cursor: pointer;
 }
 
 /* ─── Color Input ─── */
-.color-input-wrap {
-    position: relative;
-}
-
+.color-input-wrap { position: relative; }
 input[type="color"] {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 100%;
-    height: 32px;
-    background: none;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    padding: 2px;
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 32px; background: none;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    cursor: pointer; padding: 2px;
 }
-
 input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
 input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
 
 /* ─── Checkbox ─── */
 input[type="checkbox"] {
-    accent-color: var(--accent);
-    margin-right: 4px;
-    cursor: pointer;
+    accent-color: var(--accent); margin-right: 4px;
+    cursor: pointer; width: 16px; height: 16px;
 }
 
 /* ─── Color Palette ─── */
-.color-palette {
-    display: flex;
-    gap: 4px;
-    flex-wrap: wrap;
-    min-height: 24px;
-}
-
+.color-palette { display: flex; gap: 4px; flex-wrap: wrap; min-height: 24px; }
 .color-swatch {
-    width: 24px;
-    height: 24px;
-    border-radius: 4px;
-    border: 2px solid transparent;
-    cursor: pointer;
-    transition: all var(--tr);
-    padding: 0;
+    width: 26px; height: 26px; border-radius: 4px;
+    border: 2px solid transparent; cursor: pointer;
+    transition: all var(--tr); padding: 0;
 }
-
 .color-swatch:hover { border-color: var(--text-2); transform: scale(1.1); }
 .color-swatch.active { border-color: var(--accent); }
 
 /* ─── Presets ─── */
-.preset-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-}
-
+.preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .preset-btn, .size-preset-btn {
-    padding: 8px 10px;
-    background: var(--bg-3);
-    border: 1px solid var(--border);
-    color: var(--text-2);
-    font-family: var(--font-mono);
-    font-size: 10px;
-    font-weight: 700;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
+    padding: 8px 10px; background: var(--bg-3);
+    border: 1px solid var(--border); color: var(--text-2);
+    font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+    border-radius: var(--radius-sm); cursor: pointer;
     transition: all var(--tr);
 }
-
 .preset-btn:hover, .size-preset-btn:hover { color: var(--text-1); border-color: var(--border-hover); }
 .preset-btn:active, .size-preset-btn:active { transform: scale(0.97); }
 .preset-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
 
-/* ─── Animations ─── */
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(3px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
 /* ═══════════════════════════════════
-   DESKTOP LAYOUT (min-width: 768px)
+   DESKTOP LAYOUT
    ═══════════════════════════════════ */
 @media (min-width: 768px) {
     #app { flex-direction: row; }
-
     #controls {
-        order: -1;
-        width: var(--panel-w);
-        min-width: var(--panel-w);
-        max-height: 100dvh;
-        height: 100dvh;
-        border-top: none;
-        border-right: 1px solid var(--border);
+        order: -1; width: var(--panel-w); min-width: var(--panel-w);
+        max-height: 100dvh; height: 100dvh;
+        border-top: none; border-right: 1px solid var(--border);
     }
-
     #canvas-area {
-        flex: 1;
-        height: 100dvh;
-        max-height: 100dvh;
-        min-height: unset;
+        flex: 1; height: 100dvh; max-height: 100dvh; min-height: unset;
         background-image: radial-gradient(circle at 50% 50%, rgba(108,138,255,0.02) 0%, transparent 60%);
     }
-
     #drawCanvas {
         box-shadow: 0 4px 30px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04);
         border-radius: 3px;
     }
-
     .scroll-container { padding: 16px; }
 }
 
@@ -503,22 +383,15 @@ input[type="checkbox"] {
    MOBILE LAYOUT
    ═══════════════════════════════════ */
 @media (max-width: 767px) {
-    #canvas-area {
-        flex: 1 1 0;
-        min-height: 0;
-    }
+    #canvas-area { flex: 1 1 0; min-height: 0; }
+    #controls { flex: 0 0 auto; max-height: 45dvh; }
+    input[type="number"] { font-size: 16px; }
+    .tool-btn { width: 40px; height: 38px; }
 
-    #controls {
-        flex: 0 0 auto;
-        max-height: 45dvh;
-    }
-
-    input[type="number"] {
-        font-size: 16px; /* prevents iOS auto-zoom */
-    }
-
-    .tool-btn {
-        width: 40px;
-        height: 36px;
-    }
+    /* bigger touch targets on mobile */
+    .btn-action { padding: 11px 10px; font-size: 10px; }
+    input[type="range"]::-webkit-slider-thumb { width: 24px; height: 24px; }
+    input[type="range"]::-moz-range-thumb { width: 24px; height: 24px; }
+    .color-swatch { width: 30px; height: 30px; }
+    input[type="checkbox"] { width: 20px; height: 20px; }
 }
