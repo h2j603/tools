@@ -16,16 +16,26 @@
     <div id="app">
         <div id="canvas-area">
             <canvas id="drawCanvas"></canvas>
+            <div id="brushCursor"></div>
             <div id="canvas-info">
-                <span id="canvasInfoText">0 x 0</span>
+                <span id="canvasInfoText">1080 × 1080</span>
+                <span id="zoomLevel">100%</span>
                 <span id="strokeCount">strokes: 0</span>
             </div>
+        </div>
+
+        <!-- Fullscreen overlay -->
+        <div id="fullscreen-view" class="hidden">
+            <canvas id="fullscreenCanvas"></canvas>
+            <button id="closeFullscreen" class="close-btn" aria-label="닫기">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M1 1L17 17M17 1L1 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
         </div>
 
         <section id="controls">
             <div class="scroll-container">
 
-                <!-- Quick Actions -->
+                <!-- Quick Actions Row 1 -->
                 <div class="quick-actions">
                     <button id="undoBtn" class="btn-action" title="되돌리기 (Ctrl+Z)">
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 7H11C13.2091 7 15 8.79086 15 11C15 13.2091 13.2091 15 11 15H8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M6 4L3 7L6 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -36,9 +46,38 @@
                         REDO
                     </button>
                     <button id="clearBtn" class="btn-action danger">CLEAR</button>
+                </div>
+
+                <!-- Quick Actions Row 2 -->
+                <div class="quick-actions">
+                    <button id="fullscreenBtn" class="btn-action" title="전체화면 미리보기">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 6V2H6M10 2H14V6M14 10V14H10M6 14H2V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        FULL
+                    </button>
                     <button id="exportBtn" class="btn-action primary">
                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1V10M3 6L7 10L11 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 10V12C1 12.5523 1.44772 13 2 13H12C12.5523 13 13 12.5523 13 12V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                        SAVE
+                        PNG
+                    </button>
+                    <button id="exportTransBtn" class="btn-action">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1V10M3 6L7 10L11 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 10V12C1 12.5523 1.44772 13 2 13H12C12.5523 13 13 12.5523 13 12V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                        TRANS
+                    </button>
+                </div>
+
+                <!-- Tool Selection Bar -->
+                <div class="tool-bar">
+                    <button class="tool-btn active" data-tool="brush" title="브러시 (B)">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11.5 1.5L14.5 4.5L5.5 13.5L1 15L2.5 10.5L11.5 1.5Z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <button class="tool-btn" data-tool="eraser" title="지우개 (E)">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M7 14H14M3.5 14L1.5 12C0.7 11.2 0.7 9.8 1.5 9L9 1.5C9.8 0.7 11.2 0.7 12 1.5L14.5 4C15.3 4.8 15.3 6.2 14.5 7L8 13.5L3.5 14Z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <div class="tool-separator"></div>
+                    <button class="tool-btn" id="mirrorBtn" data-tool="mirror" title="좌우 대칭 (M)">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1V15M3 4L1 8L3 12M13 4L15 8L13 12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <button class="tool-btn" id="fitBtn" title="화면에 맞추기">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M5 8H11M8 5V11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
                     </button>
                 </div>
 
@@ -54,22 +93,22 @@
                     <div class="section-body">
                         <div class="field">
                             <label>SIZE <span class="val" id="sizeVal">8</span></label>
-                            <input type="range" id="brushSize" min="1" max="60" value="8">
+                            <input type="range" id="brushSize" min="1" max="80" value="8">
                         </div>
                         <div class="field">
                             <label>MIN WIDTH RATIO <span class="val" id="minWidthVal">0.15</span></label>
                             <input type="range" id="minWidthRatio" min="0" max="100" value="15">
                         </div>
                         <div class="field">
-                            <label>SMOOTHING <span class="val" id="smoothVal">0.5</span></label>
+                            <label>SMOOTHING <span class="val" id="smoothVal">0.50</span></label>
                             <input type="range" id="smoothing" min="0" max="100" value="50">
                         </div>
                         <div class="field">
-                            <label>TAPER START <span class="val" id="taperStartVal">0.1</span></label>
+                            <label>TAPER START <span class="val" id="taperStartVal">0.10</span></label>
                             <input type="range" id="taperStart" min="0" max="100" value="10">
                         </div>
                         <div class="field">
-                            <label>TAPER END <span class="val" id="taperEndVal">0.3</span></label>
+                            <label>TAPER END <span class="val" id="taperEndVal">0.30</span></label>
                             <input type="range" id="taperEnd" min="0" max="100" value="30">
                         </div>
                         <div class="row-2">
@@ -84,6 +123,43 @@
                                 <input type="range" id="brushOpacity" min="0" max="100" value="100">
                             </div>
                         </div>
+                        <!-- Recent Colors -->
+                        <div class="field">
+                            <label>RECENT COLORS</label>
+                            <div id="recentColors" class="color-palette"></div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- BRUSH PRESETS -->
+                <details class="section-collapsible">
+                    <summary class="section-toggle"><h2>BRUSH PRESETS</h2></summary>
+                    <div class="section-body">
+                        <div class="preset-grid">
+                            <button class="preset-btn" data-preset="pen">Pen</button>
+                            <button class="preset-btn" data-preset="brush">Brush</button>
+                            <button class="preset-btn" data-preset="marker">Marker</button>
+                            <button class="preset-btn" data-preset="calligraphy">Calligraphy</button>
+                            <button class="preset-btn" data-preset="ink">Ink</button>
+                            <button class="preset-btn" data-preset="pencil">Pencil</button>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- REFERENCE IMAGE -->
+                <details class="section-collapsible">
+                    <summary class="section-toggle"><h2>REFERENCE IMAGE</h2></summary>
+                    <div class="section-body">
+                        <label for="refImageInput" class="btn-action upload-btn" tabindex="0" role="button" style="margin-bottom:4px">
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1V10M3 5L7 1L11 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 10V12C1 12.5523 1.44772 13 2 13H12C12.5523 13 13 12.5523 13 12V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                            LOAD REFERENCE
+                        </label>
+                        <input type="file" id="refImageInput" accept="image/*" style="display:none">
+                        <div class="field">
+                            <label>OPACITY <span class="val" id="refOpacityVal">0.30</span></label>
+                            <input type="range" id="refOpacity" min="0" max="100" value="30">
+                        </div>
+                        <button id="removeRefBtn" class="btn-action danger" style="margin-top:2px">REMOVE</button>
                     </div>
                 </details>
 
@@ -91,6 +167,12 @@
                 <details class="section-collapsible">
                     <summary class="section-toggle"><h2>CANVAS</h2></summary>
                     <div class="section-body">
+                        <div class="preset-grid" style="margin-bottom:6px">
+                            <button class="size-preset-btn" data-w="1080" data-h="1080">1080x1080</button>
+                            <button class="size-preset-btn" data-w="1080" data-h="1920">1080x1920</button>
+                            <button class="size-preset-btn" data-w="1920" data-h="1080">1920x1080</button>
+                            <button class="size-preset-btn" data-w="2048" data-h="2048">2048x2048</button>
+                        </div>
                         <div class="row-2">
                             <div class="field">
                                 <label>WIDTH</label>
@@ -111,19 +193,6 @@
                     </div>
                 </details>
 
-                <!-- PRESETS -->
-                <details class="section-collapsible">
-                    <summary class="section-toggle"><h2>BRUSH PRESETS</h2></summary>
-                    <div class="section-body">
-                        <div class="preset-grid">
-                            <button class="preset-btn" data-preset="pen">Pen</button>
-                            <button class="preset-btn" data-preset="brush">Brush</button>
-                            <button class="preset-btn" data-preset="marker">Marker</button>
-                            <button class="preset-btn" data-preset="calligraphy">Calligraphy</button>
-                        </div>
-                    </div>
-                </details>
-
                 <!-- GUIDES -->
                 <details class="section-collapsible">
                     <summary class="section-toggle"><h2>GUIDES</h2></summary>
@@ -134,12 +203,21 @@
                             </label>
                         </div>
                         <div class="field">
+                            <label>
+                                <input type="checkbox" id="showGrid"> SHOW GRID
+                            </label>
+                        </div>
+                        <div class="field">
                             <label>ROWS <span class="val" id="guideRowsVal">4</span></label>
                             <input type="range" id="guideRows" min="1" max="12" value="4">
                         </div>
                         <div class="field">
                             <label>PADDING <span class="val" id="guidePadVal">5%</span></label>
                             <input type="range" id="guidePadding" min="0" max="30" value="5">
+                        </div>
+                        <div class="field">
+                            <label>GRID SIZE <span class="val" id="gridSizeVal">50</span></label>
+                            <input type="range" id="gridSize" min="10" max="200" value="50">
                         </div>
                     </div>
                 </details>

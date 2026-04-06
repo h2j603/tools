@@ -62,9 +62,32 @@ body, html {
     cursor: crosshair;
 }
 
+#canvas-area.eraser-mode { cursor: none; }
+#canvas-area.panning { cursor: grab; }
+#canvas-area.panning:active { cursor: grabbing; }
+
 #drawCanvas {
     display: block;
     border-radius: 2px;
+    position: absolute;
+    transform-origin: 0 0;
+}
+
+/* ─── Brush Cursor ─── */
+#brushCursor {
+    position: absolute;
+    border: 1.5px solid rgba(108,138,255,0.6);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 10;
+    display: none;
+    transform: translate(-50%, -50%);
+    transition: width 0.1s ease, height 0.1s ease;
+}
+
+#canvas-area:hover #brushCursor,
+#canvas-area.drawing #brushCursor {
+    display: block;
 }
 
 #canvas-info {
@@ -84,6 +107,42 @@ body, html {
     gap: 10px;
     pointer-events: none;
     white-space: nowrap;
+    z-index: 5;
+}
+
+/* ─── Fullscreen View ─── */
+#fullscreen-view {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: var(--bg-0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#fullscreen-view.hidden { display: none; }
+
+#fullscreenCanvas {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.close-btn {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 40px;
+    height: 40px;
+    background: rgba(0,0,0,0.6);
+    border: 1px solid var(--border);
+    color: var(--text-1);
+    border-radius: 50%;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    backdrop-filter: blur(6px);
 }
 
 /* ─── Controls Panel ─── */
@@ -148,6 +207,41 @@ body, html {
 .btn-action.primary { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
 .btn-action.primary:hover { background: var(--accent); color: var(--bg-0); }
 .btn-action.danger:hover { color: var(--danger); border-color: var(--danger); }
+
+/* ─── Tool Bar ─── */
+.tool-bar {
+    display: flex;
+    gap: 4px;
+    padding: 6px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    flex-shrink: 0;
+}
+
+.tool-btn {
+    width: 36px;
+    height: 32px;
+    background: none;
+    border: 1px solid transparent;
+    color: var(--text-3);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition: all var(--tr);
+    padding: 0;
+}
+
+.tool-btn:hover { color: var(--text-1); background: var(--bg-3); }
+.tool-btn.active { color: var(--accent); border-color: var(--accent); background: var(--accent-dim); }
+
+.tool-separator {
+    width: 1px;
+    background: var(--border);
+    margin: 2px 4px;
+    flex-shrink: 0;
+}
 
 /* ─── Tool Navigation ─── */
 .tool-nav-link {
@@ -322,6 +416,27 @@ input[type="checkbox"] {
     cursor: pointer;
 }
 
+/* ─── Color Palette ─── */
+.color-palette {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    min-height: 24px;
+}
+
+.color-swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all var(--tr);
+    padding: 0;
+}
+
+.color-swatch:hover { border-color: var(--text-2); transform: scale(1.1); }
+.color-swatch.active { border-color: var(--accent); }
+
 /* ─── Presets ─── */
 .preset-grid {
     display: grid;
@@ -329,7 +444,7 @@ input[type="checkbox"] {
     gap: 6px;
 }
 
-.preset-btn {
+.preset-btn, .size-preset-btn {
     padding: 8px 10px;
     background: var(--bg-3);
     border: 1px solid var(--border);
@@ -342,8 +457,8 @@ input[type="checkbox"] {
     transition: all var(--tr);
 }
 
-.preset-btn:hover { color: var(--text-1); border-color: var(--border-hover); }
-.preset-btn:active { transform: scale(0.97); }
+.preset-btn:hover, .size-preset-btn:hover { color: var(--text-1); border-color: var(--border-hover); }
+.preset-btn:active, .size-preset-btn:active { transform: scale(0.97); }
 .preset-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
 
 /* ─── Animations ─── */
@@ -400,5 +515,10 @@ input[type="checkbox"] {
 
     input[type="number"] {
         font-size: 16px; /* prevents iOS auto-zoom */
+    }
+
+    .tool-btn {
+        width: 40px;
+        height: 36px;
     }
 }
