@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Lettering Tool</title>
-    <meta name="description" content="펜 툴 기반 레터링 도구 — 앵커 배치, 베지어 핸들 편집, SVG 내보내기">
+    <meta name="description" content="픽셀로 그리고 벡터로 변환하는 레터링 도구">
     <meta name="theme-color" content="#111113">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✍</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -28,43 +28,32 @@
 
                 <!-- Tool Bar -->
                 <div class="tool-bar">
-                    <button class="tool-btn active" data-tool="pen" title="펜 (P) — 앵커 배치">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 14L5 13L13 5C13.6 4.4 13.6 3.6 13 3L13 3C12.4 2.4 11.6 2.4 11 3L3 11L2 14Z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="5" cy="13" r="1.5" fill="currentColor"/></svg>
+                    <button class="tool-btn active" data-tool="draw" title="픽셀 그리기 (D)">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="3" width="4" height="4" fill="currentColor"/><rect x="9" y="3" width="4" height="4" fill="currentColor" opacity="0.5"/><rect x="3" y="9" width="4" height="4" fill="currentColor" opacity="0.5"/><rect x="9" y="9" width="4" height="4" fill="currentColor"/></svg>
                     </button>
-                    <button class="tool-btn" data-tool="select" title="선택 (V) — 패스 전체 이동">
+                    <button class="tool-btn" data-tool="erase" title="픽셀 지우기 (E)">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M7 14H14M3.5 14L1.5 12C0.7 11.2 0.7 9.8 1.5 9L9 1.5C9.8 0.7 11.2 0.7 12 1.5L14.5 4C15.3 4.8 15.3 6.2 14.5 7L8 13.5L3.5 14Z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <button class="tool-btn" data-tool="select" title="앵커/핸들 편집 (V)">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 1L2 12L5.5 8.5L8.5 14L10.5 13L7.5 7L12 6.5L2 1Z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
-                    <button class="tool-btn" data-tool="direct" title="직접 선택 (A) — 개별 앵커/핸들 편집">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 1L2 12L5.5 8.5L8.5 14L10.5 13L7.5 7L12 6.5L2 1Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2 2"/></svg>
-                    </button>
                     <div class="tool-separator"></div>
-                    <button class="tool-btn active" id="curveBtn" title="곡선 모드 (C)">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 12C2 12 5 2 8 2C11 2 14 12 14 12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-                    </button>
-                    <button class="tool-btn" id="lineBtn" title="직선 모드 (L)">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 13L13 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-                    </button>
-                    <div class="tool-separator"></div>
-                    <button class="tool-btn" id="closePathBtn" title="패스 닫기 (Enter)">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M6 8H10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-                    </button>
-                    <button class="tool-btn" id="fitBtn" title="화면 맞추기 (0)">
+                    <button class="tool-btn" id="fitBtn" title="화면 맞추기">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M5 8H11M8 5V11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
                     </button>
                 </div>
 
                 <!-- Quick Actions -->
                 <div class="quick-actions">
-                    <button id="undoBtn" class="btn-action">UNDO</button>
-                    <button id="redoBtn" class="btn-action">REDO</button>
+                    <button id="vectorizeBtn" class="btn-action primary">VECTORIZE</button>
                     <button id="clearBtn" class="btn-action danger">CLEAR</button>
+                    <button class="btn-action" onclick="_letteringToggleTheme()">THEME</button>
                 </div>
 
                 <div class="quick-actions">
                     <button id="exportSvgBtn" class="btn-action primary">SVG</button>
                     <button id="exportPngBtn" class="btn-action">PNG</button>
                     <button id="fullscreenBtn" class="btn-action">FULL</button>
-                    <button class="btn-action" onclick="_letteringToggleTheme()" title="테마 전환">THEME</button>
                 </div>
 
                 <a href="../" class="tool-nav-link">
@@ -73,51 +62,54 @@
                     <span class="tool-nav-arrow">→</span>
                 </a>
 
-                <!-- PATH PROPERTIES -->
+                <!-- PIXEL GRID SETTINGS -->
                 <details class="section-collapsible" open>
-                    <summary class="section-toggle"><h2>PATH</h2></summary>
+                    <summary class="section-toggle"><h2>PIXEL GRID</h2></summary>
                     <div class="section-body">
                         <div class="field">
-                            <label>FILL COLOR</label>
-                            <div class="color-input-wrap">
-                                <input type="color" id="fillColor" value="#e8e8ec">
+                            <label>RESOLUTION <span class="val" id="gridResVal">36</span></label>
+                            <input type="range" id="gridRes" min="8" max="100" value="36">
+                        </div>
+                        <div class="field">
+                            <label>SMOOTHING <span class="val" id="smoothAmountVal">0.30</span></label>
+                            <input type="range" id="smoothAmount" min="0" max="100" value="30">
+                        </div>
+                    </div>
+                </details>
+
+                <!-- VIEW -->
+                <details class="section-collapsible" open>
+                    <summary class="section-toggle"><h2>VIEW</h2></summary>
+                    <div class="section-body">
+                        <div class="field">
+                            <label><input type="checkbox" id="showGrid" checked> GRID</label>
+                        </div>
+                        <div class="field">
+                            <label><input type="checkbox" id="showPixels" checked> PIXELS</label>
+                        </div>
+                        <div class="field">
+                            <label><input type="checkbox" id="showOutline" checked> OUTLINE</label>
+                        </div>
+                        <div class="field">
+                            <label><input type="checkbox" id="showFill" checked> FILL</label>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- COLORS -->
+                <details class="section-collapsible" open>
+                    <summary class="section-toggle"><h2>COLORS</h2></summary>
+                    <div class="section-body">
+                        <div class="row-2">
+                            <div class="field">
+                                <label>FILL</label>
+                                <div class="color-input-wrap"><input type="color" id="fillColor" value="#e8e8ec"></div>
+                            </div>
+                            <div class="field">
+                                <label>BG</label>
+                                <div class="color-input-wrap"><input type="color" id="bgColor" value="#0c0c0e"></div>
                             </div>
                         </div>
-                        <div class="field">
-                            <label>FILL OPACITY <span class="val" id="fillOpacityVal">1.0</span></label>
-                            <input type="range" id="fillOpacity" min="0" max="100" value="100">
-                        </div>
-                        <div class="field">
-                            <label>
-                                <input type="checkbox" id="showFill" checked> SHOW FILL
-                            </label>
-                        </div>
-                        <div class="field">
-                            <label>
-                                <input type="checkbox" id="showStroke" checked> SHOW OUTLINE
-                            </label>
-                        </div>
-                    </div>
-                </details>
-
-                <!-- SHAPES -->
-                <details class="section-collapsible" open>
-                    <summary class="section-toggle"><h2>SHAPES</h2></summary>
-                    <div class="section-body">
-                        <div class="quick-actions">
-                            <button class="btn-action" onclick="_letteringAddRect()">RECT (R)</button>
-                            <button class="btn-action" onclick="_letteringAddEllipse()">ELLIPSE (O)</button>
-                        </div>
-                        <button class="btn-action" onclick="_letteringUnion()" style="margin-top:4px">UNION (PATHFINDER)</button>
-                    </div>
-                </details>
-
-                <!-- PATHS LIST -->
-                <details class="section-collapsible" open>
-                    <summary class="section-toggle"><h2>PATHS</h2></summary>
-                    <div class="section-body">
-                        <div id="pathList" class="path-list"></div>
-                        <button id="newPathBtn" class="btn-action" style="margin-top:4px">+ NEW PATH</button>
                     </div>
                 </details>
 
@@ -142,8 +134,6 @@
                         <div class="preset-grid" style="margin-bottom:6px">
                             <button class="size-preset-btn" data-w="1080" data-h="1080">1080²</button>
                             <button class="size-preset-btn" data-w="1000" data-h="1000">1000²</button>
-                            <button class="size-preset-btn" data-w="1080" data-h="1920">1080×1920</button>
-                            <button class="size-preset-btn" data-w="2048" data-h="2048">2048²</button>
                         </div>
                         <div class="row-2">
                             <div class="field">
@@ -155,30 +145,7 @@
                                 <input type="number" id="canvasH" value="1080" min="100" max="4096">
                             </div>
                         </div>
-                        <div class="field">
-                            <label>BG COLOR</label>
-                            <div class="color-input-wrap">
-                                <input type="color" id="bgColor" value="#0c0c0e">
-                            </div>
-                        </div>
                         <button id="resizeBtn" class="btn-action" style="margin-top:4px">APPLY SIZE</button>
-                    </div>
-                </details>
-
-                <!-- GUIDES -->
-                <details class="section-collapsible">
-                    <summary class="section-toggle"><h2>GUIDES</h2></summary>
-                    <div class="section-body">
-                        <div class="field">
-                            <label><input type="checkbox" id="showGrid"> GRID</label>
-                        </div>
-                        <div class="field">
-                            <label>GRID SIZE <span class="val" id="gridSizeVal">50</span></label>
-                            <input type="range" id="gridSize" min="10" max="200" value="50">
-                        </div>
-                        <div class="field">
-                            <label><input type="checkbox" id="snapGrid"> SNAP TO GRID</label>
-                        </div>
                     </div>
                 </details>
 
@@ -186,7 +153,7 @@
         </section>
     </div>
 
-    <!-- Fullscreen overlay -->
+    <!-- Fullscreen -->
     <div id="fullscreen-view" class="hidden">
         <canvas id="fullscreenCanvas"></canvas>
         <button id="closeFullscreen" class="close-btn" aria-label="닫기">

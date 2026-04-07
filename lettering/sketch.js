@@ -1,33 +1,31 @@
 /* ═══════════════════════════════════════════
-   Lettering Tool v4 — Point-to-Shape Editor
-   Tap to place points → auto smooth outline → filled shape
-   Illustrator/Glyphs-style path editing with handles
+   Lettering Tool v5 — Pixel-to-Vector
+   Paint pixels on grid → auto-trace outline → smooth bezier → SVG
    ═══════════════════════════════════════════ */
-
 (() => {
-    // ─── State ───
     const state = {
+        // Canvas
         canvasW: 1080, canvasH: 1080,
         bgColor: '#0c0c0e',
         fillColor: '#e8e8ec',
-        fillOpacity: 1.0,
-        showFill: true,
-        showStroke: true,
-        tool: 'pen', // 'pen' | 'select' | 'direct'
-        penMode: 'curve', // 'curve' | 'line'
-        // Paths: array of { anchors: [{x,y,hix,hiy,hox,hoy}], closed, color, opacity }
-        paths: [],
-        activePath: -1,    // index of path being drawn/edited
-        redoStack: [],
+        // Grid of pixels
+        gridCols: 36, gridRows: 36,
+        pixels: null, // Uint8Array, 1 = filled
+        // Vectorized paths (generated from pixels)
+        paths: [], // [{ points:[{x,y}], smoothed:[{x,y,hox,hoy,hix,hiy}] }]
+        // Tool
+        tool: 'draw', // 'draw' | 'erase' | 'select'
+        penMode: 'curve', // 'curve' | 'line' (for manual anchor editing)
+        // View
         zoom: 1, panX: 0, panY: 0,
-        showGrid: false, gridSize: 50, snapGrid: false,
-        refImage: null, refOpacity: 0.3,
-        // Drag state
-        dragTarget: null, // { pathIdx, anchorIdx, type:'anchor'|'handleIn'|'handleOut' }
+        showGrid: true, showPixels: true, showOutline: true, showFill: true,
+        smoothAmount: 0.3,
+        // Select state (for editing vectorized anchors)
+        activePath: -1,
+        dragTarget: null,
         isDragging: false,
-        // For pen tool: did user drag on place? → set handles
-        penDragStart: null,
-        penDragAnchorIdx: -1,
+        // Ref
+        refImage: null, refOpacity: 0.3,
     };
 
     const canvas = document.getElementById('drawCanvas');
@@ -35,19 +33,18 @@
     const canvasArea = document.getElementById('canvas-area');
     let activePointers = new Map();
     let pinchStartDist = 0, pinchStartZoom = 1;
-
-    // Hit test radius (screen px), scaled for mobile
+    let isPointerDown = false;
     const HIT_R = 18;
 
     // ══════════════════════
     // INIT
     // ══════════════════════
     function init() {
+        state.pixels = new Uint8Array(state.gridCols * state.gridRows);
         fitView();
         bindPointerEvents();
         bindUI();
         bindKeyboard();
-        newPath();
         render();
     }
 
@@ -60,8 +57,7 @@
     }
 
     function applyTransform() {
-        canvas.width = state.canvasW;
-        canvas.height = state.canvasH;
+        canvas.width = state.canvasW; canvas.height = state.canvasH;
         canvas.style.width = (state.canvasW * state.zoom) + 'px';
         canvas.style.height = (state.canvasH * state.zoom) + 'px';
         canvas.style.left = state.panX + 'px';
@@ -70,85 +66,24 @@
 
     function canvasCoords(e) {
         const rect = canvas.getBoundingClientRect();
-        let x = (e.clientX - rect.left) / state.zoom;
-        let y = (e.clientY - rect.top) / state.zoom;
-        if (state.snapGrid) {
-            x = Math.round(x / state.gridSize) * state.gridSize;
-            y = Math.round(y / state.gridSize) * state.gridSize;
-        }
-        return { x, y };
+        return {
+            x: (e.clientX - rect.left) / state.zoom,
+            y: (e.clientY - rect.top) / state.zoom,
+        };
     }
 
-    // ══════════════════════
-    // PATH MANAGEMENT
-    // ══════════════════════
-    function newPath() {
-        state.paths.push({
-            anchors: [],
-            closed: false,
-            color: state.fillColor,
-            opacity: state.fillOpacity,
-        });
-        state.activePath = state.paths.length - 1;
-        renderPathList();
-        updateInfo();
+    function cellSize() {
+        return { w: state.canvasW / state.gridCols, h: state.canvasH / state.gridRows };
     }
 
-    function getActivePath() {
-        return state.paths[state.activePath] || null;
+    function pxIdx(col, row) { return row * state.gridCols + col; }
+    function getPx(col, row) {
+        if (col < 0 || col >= state.gridCols || row < 0 || row >= state.gridRows) return 0;
+        return state.pixels[pxIdx(col, row)];
     }
-
-    function closePath() {
-        const p = getActivePath();
-        if (!p || p.anchors.length < 3) return;
-        p.closed = true;
-        // Auto-smooth all anchors
-        autoSmoothAnchors(p);
-        saveState();
-        render();
-        renderPathList();
-    }
-
-    // ══════════════════════
-    // AUTO-SMOOTH: make the outline curve smoothly through all points
-    // ══════════════════════
-    function autoSmoothAnchors(path) {
-        const a = path.anchors;
-        const n = a.length;
-        if (n < 2) return;
-
-        for (let i = 0; i < n; i++) {
-            const prev = a[(i - 1 + n) % n];
-            const curr = a[i];
-            const next = a[(i + 1) % n];
-
-            // Straight anchor → no handles (직선)
-            if (curr.straight) {
-                curr.hix = 0; curr.hiy = 0;
-                curr.hox = 0; curr.hoy = 0;
-                continue;
-            }
-
-            if (!path.closed && i === 0) {
-                const dx = next.x - curr.x, dy = next.y - curr.y;
-                curr.hox = dx * 0.3; curr.hoy = dy * 0.3;
-                curr.hix = 0; curr.hiy = 0;
-            } else if (!path.closed && i === n - 1) {
-                const dx = prev.x - curr.x, dy = prev.y - curr.y;
-                curr.hix = dx * 0.3; curr.hiy = dy * 0.3;
-                curr.hox = 0; curr.hoy = 0;
-            } else {
-                const dx = next.x - prev.x, dy = next.y - prev.y;
-                const len = Math.hypot(dx, dy) || 1;
-                const ux = dx / len, uy = dy / len;
-                const dPrev = Math.hypot(curr.x - prev.x, curr.y - prev.y);
-                const dNext = Math.hypot(next.x - curr.x, next.y - curr.y);
-                curr.hix = -ux * dPrev * 0.3;
-                curr.hiy = -uy * dPrev * 0.3;
-                curr.hox = ux * dNext * 0.3;
-                curr.hoy = uy * dNext * 0.3;
-            }
-        }
+    function setPx(col, row, val) {
+        if (col < 0 || col >= state.gridCols || row < 0 || row >= state.gridRows) return;
+        state.pixels[pxIdx(col, row)] = val;
     }
 
     // ══════════════════════
@@ -165,8 +100,6 @@
     function onDown(e) {
         e.preventDefault();
         activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
-        // Two-finger → pinch
         if (activePointers.size === 2) {
             const pts = [...activePointers.values()];
             pinchStartDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
@@ -175,71 +108,22 @@
         }
         if (activePointers.size > 2) return;
 
+        isPointerDown = true;
         const pt = canvasCoords(e);
+        canvasArea.setPointerCapture(e.pointerId);
 
-        if (state.tool === 'direct') {
-            // Direct Selection: hit-test individual anchors/handles
-            const hit = hitTestAll(pt);
+        if (state.tool === 'draw' || state.tool === 'erase') {
+            paintAt(pt, state.tool === 'draw');
+            render();
+            return;
+        }
+        if (state.tool === 'select') {
+            const hit = hitTestAnchors(pt);
             if (hit) {
                 state.dragTarget = hit;
                 state.isDragging = true;
-                state.activePath = hit.pathIdx;
-                canvasArea.setPointerCapture(e.pointerId);
-                renderPathList(); render();
-                return;
             }
-            const pathIdx = hitTestPath(pt);
-            if (pathIdx >= 0) { state.activePath = pathIdx; renderPathList(); render(); }
-            return;
-        }
-
-        if (state.tool === 'select') {
-            // Selection: select & move entire path
-            const pathIdx = hitTestPath(pt);
-            if (pathIdx >= 0) {
-                state.activePath = pathIdx;
-                state.dragTarget = { pathIdx, type: 'path' };
-                state.isDragging = true;
-                state._dragLast = pt;
-                canvasArea.setPointerCapture(e.pointerId);
-                renderPathList(); render();
-            }
-            return;
-        }
-
-        if (state.tool === 'pen') {
-            canvasArea.setPointerCapture(e.pointerId);
-            const path = getActivePath();
-            if (!path) return;
-
-            // Check if clicking on first anchor → close path
-            if (path.anchors.length >= 3) {
-                const first = path.anchors[0];
-                const r = HIT_R / state.zoom;
-                if (Math.hypot(pt.x - first.x, pt.y - first.y) < r) {
-                    closePath();
-                    newPath();
-                    return;
-                }
-            }
-
-            // If path is closed, start new path
-            if (path.closed) {
-                newPath();
-            }
-
-            // Place anchor
-            const isStraight = state.penMode === 'line';
-            const anchor = { x: pt.x, y: pt.y, hix: 0, hiy: 0, hox: 0, hoy: 0, straight: isStraight };
-            getActivePath().anchors.push(anchor);
-            state.penDragStart = pt;
-            state.penDragAnchorIdx = getActivePath().anchors.length - 1;
-
-            // Auto-smooth curve anchors (skip straight ones)
-            autoSmoothAnchors(getActivePath());
-
             render();
-            updateInfo();
         }
     }
 
@@ -259,478 +143,462 @@
             const ar = canvasArea.getBoundingClientRect();
             const midX = (pts[0].x + pts[1].x) / 2 - ar.left;
             const midY = (pts[0].y + pts[1].y) / 2 - ar.top;
-            const cxB = (midX - state.panX) / state.zoom;
-            const cyB = (midY - state.panY) / state.zoom;
+            const cxB = (midX - state.panX) / state.zoom, cyB = (midY - state.panY) / state.zoom;
             state.zoom = newZoom;
-            state.panX = midX - cxB * state.zoom;
-            state.panY = midY - cyB * state.zoom;
+            state.panX = midX - cxB * state.zoom; state.panY = midY - cyB * state.zoom;
             applyTransform(); render(); updateInfo();
             return;
         }
-
+        if (!isPointerDown) return;
         const pt = canvasCoords(e);
 
-        // Pen tool drag → set handles
-        if (state.tool === 'pen' && state.penDragStart) {
-            const path = getActivePath();
-            if (!path) return;
-            const a = path.anchors[state.penDragAnchorIdx];
-            if (!a) return;
-            const dx = pt.x - a.x, dy = pt.y - a.y;
-            if (Math.hypot(dx, dy) > 3) {
-                a.hox = dx; a.hoy = dy;
-                a.hix = -dx; a.hiy = -dy;
-                render();
-            }
+        if (state.tool === 'draw' || state.tool === 'erase') {
+            paintAt(pt, state.tool === 'draw');
+            render();
             return;
         }
-
-        // Direct Selection: drag individual anchor/handle
-        if (state.tool === 'direct' && state.isDragging && state.dragTarget) {
+        if (state.tool === 'select' && state.isDragging && state.dragTarget) {
             const path = state.paths[state.dragTarget.pathIdx];
             if (!path) return;
-            const a = path.anchors[state.dragTarget.anchorIdx];
-            if (!a) return;
-            if (state.dragTarget.type === 'anchor') {
-                a.x = pt.x; a.y = pt.y;
-            } else if (state.dragTarget.type === 'handleOut') {
-                a.hox = pt.x - a.x; a.hoy = pt.y - a.y;
-            } else if (state.dragTarget.type === 'handleIn') {
-                a.hix = pt.x - a.x; a.hiy = pt.y - a.y;
-            }
-            render();
-        }
-
-        // Selection: move entire path
-        if (state.tool === 'select' && state.isDragging && state.dragTarget && state.dragTarget.type === 'path') {
-            const path = state.paths[state.dragTarget.pathIdx];
-            if (!path || !state._dragLast) return;
-            const dx = pt.x - state._dragLast.x;
-            const dy = pt.y - state._dragLast.y;
-            for (const a of path.anchors) {
-                a.x += dx; a.y += dy;
-            }
-            state._dragLast = pt;
+            const a = path.smoothed[state.dragTarget.anchorIdx];
+            if (state.dragTarget.type === 'anchor') { a.x = pt.x; a.y = pt.y; }
+            else if (state.dragTarget.type === 'handleOut') { a.hox = pt.x - a.x; a.hoy = pt.y - a.y; }
+            else if (state.dragTarget.type === 'handleIn') { a.hix = pt.x - a.x; a.hiy = pt.y - a.y; }
             render();
         }
     }
 
     function onUp(e) {
         activePointers.delete(e.pointerId);
-        if (state.tool === 'pen' && state.penDragStart) {
-            state.penDragStart = null;
-            state.penDragAnchorIdx = -1;
-            saveState();
+        if (isPointerDown && (state.tool === 'draw' || state.tool === 'erase')) {
+            vectorize(); // re-trace after painting
+            render();
         }
-        if ((state.tool === 'select' || state.tool === 'direct') && state.isDragging) {
-            state.isDragging = false;
-            state.dragTarget = null;
-            state._dragLast = null;
-            saveState();
-        }
+        isPointerDown = false;
+        state.isDragging = false;
+        state.dragTarget = null;
     }
 
     function onWheel(e) {
         e.preventDefault();
         const ar = canvasArea.getBoundingClientRect();
         const mx = e.clientX - ar.left, my = e.clientY - ar.top;
-        const cxB = (mx - state.panX) / state.zoom;
-        const cyB = (my - state.panY) / state.zoom;
+        const cxB = (mx - state.panX) / state.zoom, cyB = (my - state.panY) / state.zoom;
         state.zoom = Math.max(0.1, Math.min(10, state.zoom * (e.deltaY > 0 ? 0.9 : 1.1)));
-        state.panX = mx - cxB * state.zoom;
-        state.panY = my - cyB * state.zoom;
+        state.panX = mx - cxB * state.zoom; state.panY = my - cyB * state.zoom;
         applyTransform(); render(); updateInfo();
     }
 
+    function paintAt(pt, fill) {
+        const cs = cellSize();
+        const col = Math.floor(pt.x / cs.w);
+        const row = Math.floor(pt.y / cs.h);
+        setPx(col, row, fill ? 1 : 0);
+    }
+
 
     // ══════════════════════
-    // HIT TESTING
+    // MARCHING SQUARES — extract contour from pixel grid
+    // Returns array of contours, each is array of {x,y} points
     // ══════════════════════
-    function hitTestAll(pt) {
+    function marchingSquares() {
+        const cs = cellSize();
+        const cols = state.gridCols, rows = state.gridRows;
+        const visited = new Set();
+        const contours = [];
+
+        // For each cell, compute marching squares index
+        function cellVal(c, r) { return getPx(c, r); }
+
+        // Find all contour edges
+        // We walk the boundary between filled and empty cells
+        function traceContour(startC, startR, startEdge) {
+            const points = [];
+            let c = startC, r = startR, edge = startEdge;
+            const maxSteps = cols * rows * 4;
+            let steps = 0;
+
+            do {
+                const key = `${c},${r},${edge}`;
+                if (visited.has(key)) break;
+                visited.add(key);
+
+                // Midpoint of edge in canvas coords
+                const cx = c * cs.w, cy = r * cs.h;
+                let px, py;
+                if (edge === 0) { px = cx + cs.w / 2; py = cy; }           // top
+                else if (edge === 1) { px = cx + cs.w; py = cy + cs.h / 2; } // right
+                else if (edge === 2) { px = cx + cs.w / 2; py = cy + cs.h; } // bottom
+                else { px = cx; py = cy + cs.h / 2; }                        // left
+
+                points.push({ x: px, y: py });
+
+                // Walk to next edge (clockwise)
+                // Get the 4 corners of current cell: TL, TR, BR, BL
+                const tl = cellVal(c, r);
+                const tr = cellVal(c + 1, r);
+                const br = cellVal(c + 1, r + 1);
+                const bl = cellVal(c, r + 1);
+                const idx = (tl << 3) | (tr << 2) | (br << 1) | bl;
+
+                // Determine next edge based on marching squares lookup
+                let nextEdge = -1, nc = c, nr = r;
+
+                if (edge === 0) { // entered from top
+                    if (tr && !br) { nextEdge = 1; }
+                    else if (br && !tr) { nextEdge = 1; }
+                    else if (bl) { nextEdge = 2; }
+                    else { nextEdge = 3; }
+                } else if (edge === 1) { // entered from right
+                    if (br && !bl) { nextEdge = 2; }
+                    else if (bl && !br) { nextEdge = 2; }
+                    else if (tl) { nextEdge = 3; }
+                    else { nextEdge = 0; }
+                } else if (edge === 2) { // entered from bottom
+                    if (bl && !tl) { nextEdge = 3; }
+                    else if (tl && !bl) { nextEdge = 3; }
+                    else if (tr) { nextEdge = 0; }
+                    else { nextEdge = 1; }
+                } else { // entered from left (3)
+                    if (tl && !tr) { nextEdge = 0; }
+                    else if (tr && !tl) { nextEdge = 0; }
+                    else if (br) { nextEdge = 1; }
+                    else { nextEdge = 2; }
+                }
+
+                // Move to neighbor cell
+                if (nextEdge === 0) { nr = r - 1; nc = c; edge = 2; }
+                else if (nextEdge === 1) { nc = c + 1; nr = r; edge = 3; }
+                else if (nextEdge === 2) { nr = r + 1; nc = c; edge = 0; }
+                else { nc = c - 1; nr = r; edge = 1; }
+
+                c = nc; r = nr;
+                steps++;
+            } while (steps < maxSteps);
+
+            return points;
+        }
+
+        // Scan for boundary edges
+        for (let r = -1; r <= rows; r++) {
+            for (let c = -1; c <= cols; c++) {
+                // Check top edge: if cell is filled and above is empty
+                if (cellVal(c, r) && !cellVal(c, r - 1)) {
+                    const key = `${c},${r},0`;
+                    if (!visited.has(key)) {
+                        const contour = traceContour(c, r, 0);
+                        if (contour.length >= 3) contours.push(contour);
+                    }
+                }
+            }
+        }
+        return contours;
+    }
+
+    // ══════════════════════
+    // SIMPLE CONTOUR TRACE — walk the pixel boundary
+    // More reliable than marching squares for grid-aligned pixels
+    // ══════════════════════
+    function tracePixelOutlines() {
+        const cs = cellSize();
+        const cols = state.gridCols, rows = state.gridRows;
+        const contours = [];
+
+        // Build edge segments between filled and empty
+        const edges = []; // [{x1,y1,x2,y2}]
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                if (!getPx(c, r)) continue;
+                const x = c * cs.w, y = r * cs.h;
+                // Top edge
+                if (!getPx(c, r - 1)) edges.push({ x1: x, y1: y, x2: x + cs.w, y2: y });
+                // Bottom edge
+                if (!getPx(c, r + 1)) edges.push({ x1: x + cs.w, y1: y + cs.h, x2: x, y2: y + cs.h });
+                // Left edge
+                if (!getPx(c - 1, r)) edges.push({ x1: x, y1: y + cs.h, x2: x, y2: y });
+                // Right edge
+                if (!getPx(c + 1, r)) edges.push({ x1: x + cs.w, y1: y, x2: x + cs.w, y2: y + cs.h });
+            }
+        }
+
+        // Chain edges into contours
+        const used = new Array(edges.length).fill(false);
+        const eps = 0.01;
+
+        function findNext(x, y, skipIdx) {
+            for (let i = 0; i < edges.length; i++) {
+                if (used[i] || i === skipIdx) continue;
+                if (Math.abs(edges[i].x1 - x) < eps && Math.abs(edges[i].y1 - y) < eps) return i;
+            }
+            return -1;
+        }
+
+        for (let start = 0; start < edges.length; start++) {
+            if (used[start]) continue;
+            const contour = [];
+            let idx = start;
+            while (idx >= 0 && !used[idx]) {
+                used[idx] = true;
+                contour.push({ x: edges[idx].x1, y: edges[idx].y1 });
+                idx = findNext(edges[idx].x2, edges[idx].y2, idx);
+            }
+            if (contour.length >= 3) contours.push(contour);
+        }
+
+        return contours;
+    }
+
+    // ══════════════════════
+    // VECTORIZE — pixel outlines → simplified → smoothed bezier
+    // ══════════════════════
+    function vectorize() {
+        const contours = tracePixelOutlines();
+        state.paths = contours.map(pts => {
+            const simplified = rdpSimplify(pts, state.smoothAmount * cellSize().w * 0.8 + 1);
+            const smoothed = smoothAnchors(simplified);
+            return { points: pts, smoothed };
+        });
+        updateInfo();
+    }
+
+    // RDP simplification
+    function rdpSimplify(pts, epsilon) {
+        if (pts.length <= 2) return pts.slice();
+        let maxDist = 0, maxIdx = 0;
+        const first = pts[0], last = pts[pts.length - 1];
+        for (let i = 1; i < pts.length - 1; i++) {
+            const d = ptLineDist(pts[i], first, last);
+            if (d > maxDist) { maxDist = d; maxIdx = i; }
+        }
+        if (maxDist > epsilon) {
+            const left = rdpSimplify(pts.slice(0, maxIdx + 1), epsilon);
+            const right = rdpSimplify(pts.slice(maxIdx), epsilon);
+            return left.slice(0, -1).concat(right);
+        }
+        return [first, last];
+    }
+
+    function ptLineDist(p, a, b) {
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const lenSq = dx * dx + dy * dy;
+        if (lenSq === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+        const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq));
+        return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+    }
+
+    // Convert simplified points to smooth bezier anchors
+    function smoothAnchors(pts) {
+        const n = pts.length;
+        return pts.map((p, i) => {
+            const prev = pts[(i - 1 + n) % n];
+            const next = pts[(i + 1) % n];
+            const dx = next.x - prev.x, dy = next.y - prev.y;
+            const len = Math.hypot(dx, dy) || 1;
+            const ux = dx / len, uy = dy / len;
+            const dPrev = Math.hypot(p.x - prev.x, p.y - prev.y);
+            const dNext = Math.hypot(next.x - p.x, next.y - p.y);
+            const sm = state.smoothAmount;
+            return {
+                x: p.x, y: p.y,
+                hix: -ux * dPrev * sm, hiy: -uy * dPrev * sm,
+                hox: ux * dNext * sm, hoy: uy * dNext * sm,
+            };
+        });
+    }
+
+
+    // ══════════════════════
+    // HIT TEST (for select tool)
+    // ══════════════════════
+    function hitTestAnchors(pt) {
         const r = HIT_R / state.zoom;
-        // Test active path first, then others
-        const order = [state.activePath, ...state.paths.map((_,i)=>i).filter(i=>i!==state.activePath)];
-        for (const pi of order) {
+        for (let pi = 0; pi < state.paths.length; pi++) {
             const path = state.paths[pi];
-            if (!path) continue;
-            for (let ai = 0; ai < path.anchors.length; ai++) {
-                const a = path.anchors[ai];
-                if (Math.hypot(pt.x-(a.x+a.hox), pt.y-(a.y+a.hoy)) < r)
-                    return { pathIdx:pi, anchorIdx:ai, type:'handleOut' };
-                if (Math.hypot(pt.x-(a.x+a.hix), pt.y-(a.y+a.hiy)) < r)
-                    return { pathIdx:pi, anchorIdx:ai, type:'handleIn' };
-                if (Math.hypot(pt.x-a.x, pt.y-a.y) < r)
-                    return { pathIdx:pi, anchorIdx:ai, type:'anchor' };
+            for (let ai = 0; ai < path.smoothed.length; ai++) {
+                const a = path.smoothed[ai];
+                if (Math.hypot(pt.x - (a.x + a.hox), pt.y - (a.y + a.hoy)) < r)
+                    return { pathIdx: pi, anchorIdx: ai, type: 'handleOut' };
+                if (Math.hypot(pt.x - (a.x + a.hix), pt.y - (a.y + a.hiy)) < r)
+                    return { pathIdx: pi, anchorIdx: ai, type: 'handleIn' };
+                if (Math.hypot(pt.x - a.x, pt.y - a.y) < r)
+                    return { pathIdx: pi, anchorIdx: ai, type: 'anchor' };
             }
         }
         return null;
-    }
-
-    function hitTestPath(pt) {
-        // Simple: check if point is near any segment of any path
-        for (let i = state.paths.length-1; i >= 0; i--) {
-            const p = state.paths[i];
-            if (p.anchors.length < 2) continue;
-            const pts = bezierPoints(p);
-            for (const bp of pts) {
-                if (Math.hypot(pt.x-bp.x, pt.y-bp.y) < 15/state.zoom) return i;
-            }
-        }
-        return -1;
-    }
-
-    // ══════════════════════
-    // UNDO / REDO
-    // ══════════════════════
-    let history = [];
-    function saveState() {
-        history.push(JSON.stringify(state.paths));
-        if (history.length > 50) history.shift();
-        state.redoStack = [];
-    }
-    function undo() {
-        if (history.length === 0) return;
-        state.redoStack.push(JSON.stringify(state.paths));
-        state.paths = JSON.parse(history.pop());
-        state.activePath = Math.min(state.activePath, state.paths.length-1);
-        render(); renderPathList(); updateInfo();
-    }
-    function redo() {
-        if (state.redoStack.length === 0) return;
-        history.push(JSON.stringify(state.paths));
-        state.paths = JSON.parse(state.redoStack.pop());
-        state.activePath = Math.min(state.activePath, state.paths.length-1);
-        render(); renderPathList(); updateInfo();
-    }
-
-    // ══════════════════════
-    // BEZIER EVALUATION — path → dense points for rendering
-    // ══════════════════════
-    function bezierPoints(path) {
-        const a = path.anchors;
-        if (a.length < 2) return a.map(p => ({ x:p.x, y:p.y }));
-        const pts = [];
-        const count = path.closed ? a.length : a.length - 1;
-        for (let i = 0; i < count; i++) {
-            const a0 = a[i], a1 = a[(i+1) % a.length];
-            const cp1x = a0.x + a0.hox, cp1y = a0.y + a0.hoy;
-            const cp2x = a1.x + a1.hix, cp2y = a1.y + a1.hiy;
-            const segLen = Math.hypot(a1.x-a0.x, a1.y-a0.y);
-            const steps = Math.max(12, Math.round(segLen / 4));
-            for (let s = 0; s <= steps; s++) {
-                const t = s / steps, it = 1-t;
-                pts.push({
-                    x: it*it*it*a0.x + 3*it*it*t*cp1x + 3*it*t*t*cp2x + t*t*t*a1.x,
-                    y: it*it*it*a0.y + 3*it*it*t*cp1y + 3*it*t*t*cp2y + t*t*t*a1.y,
-                });
-            }
-        }
-        return pts;
-    }
-
-    // ══════════════════════
-    // BASIC SHAPES — rectangle, ellipse
-    // ══════════════════════
-    function addRect(cx, cy, w, h) {
-        const hw = w/2, hh = h/2;
-        const path = {
-            anchors: [
-                { x:cx-hw, y:cy-hh, hix:0,hiy:0, hox:0,hoy:0 },
-                { x:cx+hw, y:cy-hh, hix:0,hiy:0, hox:0,hoy:0 },
-                { x:cx+hw, y:cy+hh, hix:0,hiy:0, hox:0,hoy:0 },
-                { x:cx-hw, y:cy+hh, hix:0,hiy:0, hox:0,hoy:0 },
-            ],
-            closed: true,
-            color: state.fillColor,
-            opacity: state.fillOpacity,
-        };
-        saveState();
-        state.paths.push(path);
-        state.activePath = state.paths.length - 1;
-        render(); renderPathList(); updateInfo();
-    }
-
-    function addEllipse(cx, cy, rx, ry) {
-        // Approximate circle with 4 cubic beziers (kappa = 0.5522847498)
-        const k = 0.5522847498;
-        const path = {
-            anchors: [
-                { x:cx, y:cy-ry, hix:-rx*k,hiy:0, hox:rx*k,hoy:0 },
-                { x:cx+rx, y:cy, hix:0,hiy:-ry*k, hox:0,hoy:ry*k },
-                { x:cx, y:cy+ry, hix:rx*k,hiy:0, hox:-rx*k,hoy:0 },
-                { x:cx-rx, y:cy, hix:0,hiy:ry*k, hox:0,hoy:-ry*k },
-            ],
-            closed: true,
-            color: state.fillColor,
-            opacity: state.fillOpacity,
-        };
-        saveState();
-        state.paths.push(path);
-        state.activePath = state.paths.length - 1;
-        render(); renderPathList(); updateInfo();
-    }
-
-    // ══════════════════════
-    // PATHFINDER — union & subtract (simplified polygon boolean)
-    // Uses even-odd fill to combine/subtract closed paths
-    // ══════════════════════
-    function pathUnion() {
-        // Merge all selected (active) + another path into compound path
-        // Simple approach: just combine as compound (multi-contour) path in SVG
-        // For a proper boolean we'd need a clipper library, but for lettering
-        // compound paths with even-odd fill rule works for most cases
-        if (state.paths.length < 2) return;
-        // Combine all closed paths into one compound
-        const compound = {
-            anchors: [],
-            contours: [], // array of anchor arrays
-            closed: true,
-            color: state.fillColor,
-            opacity: state.fillOpacity,
-            compound: true,
-        };
-        const closedPaths = state.paths.filter(p => p.closed);
-        if (closedPaths.length < 2) return;
-        compound.contours = closedPaths.map(p => JSON.parse(JSON.stringify(p.anchors)));
-        compound.anchors = compound.contours[0]; // primary for editing
-        saveState();
-        // Remove closed paths, add compound
-        state.paths = state.paths.filter(p => !p.closed);
-        state.paths.push(compound);
-        state.activePath = state.paths.length - 1;
-        render(); renderPathList(); updateInfo();
     }
 
     // ══════════════════════
     // RENDER
     // ══════════════════════
     function render() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = state.bgColor;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const c = ctx;
+        c.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Background
+        c.fillStyle = state.bgColor;
+        c.fillRect(0, 0, state.canvasW, state.canvasH);
 
         // Reference image
         if (state.refImage) {
-            ctx.save(); ctx.globalAlpha = state.refOpacity;
-            ctx.drawImage(state.refImage, 0, 0, canvas.width, canvas.height);
-            ctx.restore();
+            c.save(); c.globalAlpha = state.refOpacity;
+            c.drawImage(state.refImage, 0, 0, state.canvasW, state.canvasH);
+            c.restore();
         }
 
         // Grid
-        if (state.showGrid) drawGrid(ctx);
+        if (state.showGrid) drawGrid(c);
 
-        // Draw all paths
-        for (let i = 0; i < state.paths.length; i++) {
-            drawPath(ctx, state.paths[i], i === state.activePath);
+        // Pixels
+        if (state.showPixels) drawPixels(c);
+
+        // Vectorized paths — fill
+        if (state.showFill) {
+            for (const path of state.paths) {
+                drawBezierPath(c, path.smoothed, true, false);
+            }
         }
 
-        // Draw handles for active path (in select or pen mode)
-        if (state.activePath >= 0 && state.paths[state.activePath]) {
-            drawAnchorsAndHandles(ctx, state.paths[state.activePath]);
+        // Vectorized paths — outline
+        if (state.showOutline) {
+            for (const path of state.paths) {
+                drawBezierPath(c, path.smoothed, false, true);
+            }
+        }
+
+        // Handles (in select mode)
+        if (state.tool === 'select') {
+            for (const path of state.paths) {
+                drawHandles(c, path.smoothed);
+            }
         }
     }
 
-    function drawPath(c, path, isActive) {
-        if (path.compound && path.contours) {
-            drawCompoundPath(c, path, isActive);
-            return;
+    function drawGrid(c) {
+        const cs = cellSize();
+        const isDark = isColorDark(state.bgColor);
+        c.save();
+        c.strokeStyle = isDark ? 'rgba(180,200,255,0.18)' : 'rgba(0,0,80,0.12)';
+        c.lineWidth = 0.5;
+        for (let col = 0; col <= state.gridCols; col++) {
+            const x = col * cs.w;
+            c.beginPath(); c.moveTo(x, 0); c.lineTo(x, state.canvasH); c.stroke();
         }
-        const a = path.anchors;
-        if (a.length === 0) return;
+        for (let row = 0; row <= state.gridRows; row++) {
+            const y = row * cs.h;
+            c.beginPath(); c.moveTo(0, y); c.lineTo(state.canvasW, y); c.stroke();
+        }
+        // Center lines
+        c.strokeStyle = isDark ? 'rgba(180,200,255,0.4)' : 'rgba(0,0,80,0.3)';
+        c.lineWidth = 1;
+        c.beginPath(); c.moveTo(state.canvasW / 2, 0); c.lineTo(state.canvasW / 2, state.canvasH); c.stroke();
+        c.beginPath(); c.moveTo(0, state.canvasH / 2); c.lineTo(state.canvasW, state.canvasH / 2); c.stroke();
+        c.restore();
+    }
 
-        // Build bezier path
+    function drawPixels(c) {
+        const cs = cellSize();
+        const isDark = isColorDark(state.bgColor);
+        c.save();
+        c.fillStyle = isDark ? 'rgba(180,200,255,0.15)' : 'rgba(0,0,80,0.1)';
+        for (let r = 0; r < state.gridRows; r++) {
+            for (let col = 0; col < state.gridCols; col++) {
+                if (getPx(col, r)) {
+                    c.fillRect(col * cs.w, r * cs.h, cs.w, cs.h);
+                }
+            }
+        }
+        c.restore();
+    }
+
+    function drawBezierPath(c, anchors, fill, stroke) {
+        if (!anchors || anchors.length < 2) return;
         c.save();
         c.beginPath();
-        if (a.length === 1) {
-            // Single point → draw dot
-            c.arc(a[0].x, a[0].y, 4, 0, Math.PI*2);
-            c.fillStyle = path.color;
-            c.globalAlpha = path.opacity;
-            c.fill();
-            c.restore();
-            return;
-        }
-
-        c.moveTo(a[0].x, a[0].y);
-        const count = path.closed ? a.length : a.length - 1;
-        for (let i = 0; i < count; i++) {
-            const a0 = a[i], a1 = a[(i+1) % a.length];
+        c.moveTo(anchors[0].x, anchors[0].y);
+        for (let i = 0; i < anchors.length; i++) {
+            const a0 = anchors[i], a1 = anchors[(i + 1) % anchors.length];
             c.bezierCurveTo(
                 a0.x + a0.hox, a0.y + a0.hoy,
                 a1.x + a1.hix, a1.y + a1.hiy,
                 a1.x, a1.y
             );
         }
-        if (path.closed) c.closePath();
-
-        c.globalAlpha = path.opacity;
-        if (state.showFill && path.closed) {
-            c.fillStyle = path.color;
+        c.closePath();
+        if (fill) {
+            c.fillStyle = state.fillColor;
+            c.globalAlpha = 0.85;
             c.fill('evenodd');
         }
-        if (state.showStroke || !path.closed) {
-            c.strokeStyle = path.color;
+        if (stroke) {
+            c.strokeStyle = state.fillColor;
             c.lineWidth = 2;
-            c.globalAlpha = isActive ? 1 : 0.5;
+            c.globalAlpha = 1;
             c.stroke();
         }
         c.restore();
     }
 
-    function drawCompoundPath(c, path, isActive) {
+    function drawHandles(c, anchors) {
+        if (!anchors) return;
         c.save();
-        c.beginPath();
-        for (const contour of path.contours) {
-            if (contour.length < 2) continue;
-            c.moveTo(contour[0].x, contour[0].y);
-            for (let i = 0; i < contour.length; i++) {
-                const a0 = contour[i], a1 = contour[(i+1) % contour.length];
-                c.bezierCurveTo(
-                    a0.x+a0.hox, a0.y+a0.hoy,
-                    a1.x+a1.hix, a1.y+a1.hiy,
-                    a1.x, a1.y
-                );
-            }
-            c.closePath();
-        }
-        c.globalAlpha = path.opacity;
-        if (state.showFill) { c.fillStyle = path.color; c.fill('evenodd'); }
-        if (state.showStroke) { c.strokeStyle = path.color; c.lineWidth = 2; c.stroke(); }
-        c.restore();
-    }
-
-    function drawAnchorsAndHandles(c, path) {
-        const a = path.anchors;
-        const showHandles = state.tool === 'direct' || state.tool === 'pen';
-        c.save();
-        for (let i = 0; i < a.length; i++) {
-            const p = a[i];
-            const hix = p.x+p.hix, hiy = p.y+p.hiy;
-            const hox = p.x+p.hox, hoy = p.y+p.hoy;
-
-            // Handle lines (only in direct/pen mode)
-            if (showHandles) {
-                c.strokeStyle = 'rgba(108,138,255,0.7)';
-                c.lineWidth = 1.5;
-                c.setLineDash([]);
-                c.beginPath();
-                c.moveTo(hix, hiy); c.lineTo(p.x, p.y); c.lineTo(hox, hoy);
-                c.stroke();
-
-                // Handle dots (circles)
-                c.fillStyle = '#6c8aff';
-                [{ x:hix, y:hiy }, { x:hox, y:hoy }].forEach(h => {
-                    c.beginPath();
-                    c.arc(h.x, h.y, 5, 0, Math.PI*2);
-                c.fill();
-                });
-            } // end showHandles
-
-            // Anchor (square, bigger for mobile)
-            const sz = 7;
-            c.fillStyle = '#fff';
-            c.strokeStyle = '#6c8aff';
-            c.lineWidth = 2;
-            c.fillRect(p.x-sz, p.y-sz, sz*2, sz*2);
-            c.strokeRect(p.x-sz, p.y-sz, sz*2, sz*2);
-
-            // First anchor marker (for close-path hint)
-            if (i === 0 && !path.closed && a.length >= 3) {
-                c.strokeStyle = 'rgba(68,204,136,0.8)';
-                c.lineWidth = 2;
-                c.beginPath();
-                c.arc(p.x, p.y, 12, 0, Math.PI*2);
-                c.stroke();
-            }
+        for (let i = 0; i < anchors.length; i++) {
+            const p = anchors[i];
+            const hix = p.x + p.hix, hiy = p.y + p.hiy;
+            const hox = p.x + p.hox, hoy = p.y + p.hoy;
+            // Handle lines
+            c.strokeStyle = 'rgba(108,138,255,0.7)';
+            c.lineWidth = 1.5; c.setLineDash([]);
+            c.beginPath(); c.moveTo(hix, hiy); c.lineTo(p.x, p.y); c.lineTo(hox, hoy); c.stroke();
+            // Handle dots
+            c.fillStyle = '#6c8aff';
+            [{ x: hix, y: hiy }, { x: hox, y: hoy }].forEach(h => {
+                c.beginPath(); c.arc(h.x, h.y, 5, 0, Math.PI * 2); c.fill();
+            });
+            // Anchor square
+            const sz = 6;
+            c.fillStyle = '#fff'; c.strokeStyle = '#6c8aff'; c.lineWidth = 2;
+            c.fillRect(p.x - sz, p.y - sz, sz * 2, sz * 2);
+            c.strokeRect(p.x - sz, p.y - sz, sz * 2, sz * 2);
         }
         c.restore();
     }
-
-    function drawGrid(c) {
-        const g = state.gridSize;
-        const isDark = isColorDark(state.bgColor);
-        const lineColor = isDark ? 'rgba(180,200,255,0.25)' : 'rgba(0,0,80,0.15)';
-        const centerColor = isDark ? 'rgba(180,200,255,0.5)' : 'rgba(0,0,80,0.35)';
-
-        c.save();
-        c.strokeStyle = lineColor;
-        c.lineWidth = 1;
-        for (let x = g; x < state.canvasW; x += g) {
-            c.beginPath(); c.moveTo(x,0); c.lineTo(x,state.canvasH); c.stroke();
-        }
-        for (let y = g; y < state.canvasH; y += g) {
-            c.beginPath(); c.moveTo(0,y); c.lineTo(state.canvasW,y); c.stroke();
-        }
-        // Center cross — much stronger
-        c.strokeStyle = centerColor;
-        c.lineWidth = 1.5;
-        c.beginPath(); c.moveTo(state.canvasW/2,0); c.lineTo(state.canvasW/2,state.canvasH); c.stroke();
-        c.beginPath(); c.moveTo(0,state.canvasH/2); c.lineTo(state.canvasW,state.canvasH/2); c.stroke();
-        c.restore();
-    }
-
 
     // ══════════════════════
-    // EXPORT — SVG
+    // EXPORT
     // ══════════════════════
     function exportSVG() {
-        const svgPaths = [];
-        for (const path of state.paths) {
-            if (path.compound && path.contours) {
-                let d = '';
-                for (const contour of path.contours) {
-                    d += contourToSVGPath(contour, true) + ' ';
-                }
-                svgPaths.push(`  <path d="${d.trim()}" fill="${path.color}" fill-rule="evenodd" opacity="${path.opacity}"/>`);
-                continue;
+        const svgPaths = state.paths.map(path => {
+            const a = path.smoothed;
+            if (!a || a.length < 2) return '';
+            const r = n => Math.round(n * 100) / 100;
+            let d = `M ${r(a[0].x)} ${r(a[0].y)}`;
+            for (let i = 0; i < a.length; i++) {
+                const a0 = a[i], a1 = a[(i + 1) % a.length];
+                d += ` C ${r(a0.x + a0.hox)} ${r(a0.y + a0.hoy)}, ${r(a1.x + a1.hix)} ${r(a1.y + a1.hiy)}, ${r(a1.x)} ${r(a1.y)}`;
             }
-            const a = path.anchors;
-            if (a.length < 2) continue;
-            const d = contourToSVGPath(a, path.closed);
-            const fill = path.closed ? path.color : 'none';
-            const stroke = path.closed ? 'none' : path.color;
-            const sw = path.closed ? '' : ' stroke-width="2"';
-            svgPaths.push(`  <path d="${d}" fill="${fill}" stroke="${stroke}"${sw} opacity="${path.opacity}"/>`);
-        }
+            d += ' Z';
+            return `  <path d="${d}" fill="${state.fillColor}"/>`;
+        }).filter(Boolean);
+
         const svg = [
             `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${state.canvasW} ${state.canvasH}" width="${state.canvasW}" height="${state.canvasH}">`,
+            `  <rect width="100%" height="100%" fill="${state.bgColor}"/>`,
             ...svgPaths,
             `</svg>`
         ].join('\n');
         const blob = new Blob([svg], { type: 'image/svg+xml' });
         const a = document.createElement('a');
         a.download = `lettering_${Date.now()}.svg`;
-        a.href = URL.createObjectURL(blob);
-        a.click();
+        a.href = URL.createObjectURL(blob); a.click();
         URL.revokeObjectURL(a.href);
     }
 
-    function contourToSVGPath(anchors, closed) {
-        if (anchors.length < 2) return '';
-        const r = n => Math.round(n * 100) / 100;
-        let d = `M ${r(anchors[0].x)} ${r(anchors[0].y)}`;
-        const count = closed ? anchors.length : anchors.length - 1;
-        for (let i = 0; i < count; i++) {
-            const a0 = anchors[i], a1 = anchors[(i+1) % anchors.length];
-            d += ` C ${r(a0.x+a0.hox)} ${r(a0.y+a0.hoy)}, ${r(a1.x+a1.hix)} ${r(a1.y+a1.hiy)}, ${r(a1.x)} ${r(a1.y)}`;
-        }
-        if (closed) d += ' Z';
-        return d;
-    }
-
-    // ══════════════════════
-    // EXPORT — PNG
-    // ══════════════════════
     function exportPNG() {
         const ec = document.createElement('canvas');
         ec.width = state.canvasW; ec.height = state.canvasH;
         const ex = ec.getContext('2d');
-        ex.fillStyle = state.bgColor;
-        ex.fillRect(0,0,state.canvasW,state.canvasH);
-        const origShowStroke = state.showStroke;
-        state.showStroke = false;
-        for (const p of state.paths) drawPath(ex, p, false);
-        state.showStroke = origShowStroke;
+        ex.fillStyle = state.bgColor; ex.fillRect(0, 0, state.canvasW, state.canvasH);
+        for (const path of state.paths) drawBezierPath(ex, path.smoothed, true, false);
         const a = document.createElement('a');
         a.download = `lettering_${Date.now()}.png`;
         a.href = ec.toDataURL('image/png'); a.click();
@@ -742,135 +610,17 @@
         v.classList.remove('hidden');
         fc.width = state.canvasW; fc.height = state.canvasH;
         const fctx = fc.getContext('2d');
-        fctx.fillStyle = state.bgColor;
-        fctx.fillRect(0,0,state.canvasW,state.canvasH);
-        for (const p of state.paths) drawPath(fctx, p, false);
+        fctx.fillStyle = state.bgColor; fctx.fillRect(0, 0, state.canvasW, state.canvasH);
+        for (const path of state.paths) drawBezierPath(fctx, path.smoothed, true, false);
     }
 
     // ══════════════════════
-    // PATH LIST UI
+    // UTILITY
     // ══════════════════════
-    function renderPathList() {
-        const el = document.getElementById('pathList');
-        el.innerHTML = '';
-        state.paths.forEach((p, i) => {
-            const item = document.createElement('div');
-            item.className = 'path-item' + (i === state.activePath ? ' active' : '');
-            const label = p.closed ? `Path ${i+1} (closed, ${p.anchors.length} pts)` :
-                          p.compound ? `Compound (${p.contours.length} contours)` :
-                          `Path ${i+1} (${p.anchors.length} pts)`;
-            item.innerHTML = `
-                <span class="path-color" style="background:${p.color}"></span>
-                <span class="path-name">${label}</span>
-                <button class="path-del-btn" data-idx="${i}">×</button>
-            `;
-            item.addEventListener('click', (e) => {
-                if (e.target.classList.contains('path-del-btn')) {
-                    saveState();
-                    state.paths.splice(i, 1);
-                    if (state.activePath >= state.paths.length) state.activePath = state.paths.length - 1;
-                    if (state.paths.length === 0) newPath();
-                    render(); renderPathList(); updateInfo();
-                    return;
-                }
-                state.activePath = i;
-                renderPathList();
-                render();
-            });
-            el.appendChild(item);
-        });
-    }
-
-    // ══════════════════════
-    // UI BINDING
-    // ══════════════════════
-    function bindUI() {
-        const $ = id => document.getElementById(id);
-
-        $('fillColor').addEventListener('input', e => {
-            state.fillColor = e.target.value;
-            const p = getActivePath();
-            if (p) { p.color = e.target.value; render(); }
-        });
-        $('fillOpacity').addEventListener('input', e => {
-            state.fillOpacity = +e.target.value / 100;
-            $('fillOpacityVal').textContent = state.fillOpacity.toFixed(1);
-            const p = getActivePath();
-            if (p) { p.opacity = state.fillOpacity; render(); }
-        });
-        $('showFill').addEventListener('change', e => { state.showFill = e.target.checked; render(); });
-        $('showStroke').addEventListener('change', e => { state.showStroke = e.target.checked; render(); });
-
-        $('undoBtn').addEventListener('click', undo);
-        $('redoBtn').addEventListener('click', redo);
-        $('clearBtn').addEventListener('click', () => {
-            saveState(); state.paths = []; state.activePath = -1;
-            newPath(); render(); renderPathList(); updateInfo();
-        });
-        $('exportSvgBtn').addEventListener('click', exportSVG);
-        $('exportPngBtn').addEventListener('click', exportPNG);
-        $('fullscreenBtn').addEventListener('click', showFullscreen);
-        $('closeFullscreen').addEventListener('click', () => $('fullscreen-view').classList.add('hidden'));
-        $('closePathBtn').addEventListener('click', () => { closePath(); newPath(); });
-        $('fitBtn').addEventListener('click', fitView);
-        $('newPathBtn').addEventListener('click', () => { newPath(); render(); });
-
-        // Tool selection
-        document.querySelectorAll('.tool-btn[data-tool]').forEach(b => {
-            b.addEventListener('click', () => {
-                state.tool = b.dataset.tool;
-                document.querySelectorAll('.tool-btn[data-tool]').forEach(x => x.classList.remove('active'));
-                b.classList.add('active');
-                canvasArea.classList.toggle('select-mode', state.tool === 'select' || state.tool === 'direct');
-            });
-        });
-
-        // Curve / Line mode toggle
-        $('curveBtn').addEventListener('click', () => {
-            state.penMode = 'curve';
-            $('curveBtn').classList.add('active');
-            $('lineBtn').classList.remove('active');
-        });
-        $('lineBtn').addEventListener('click', () => {
-            state.penMode = 'line';
-            $('lineBtn').classList.add('active');
-            $('curveBtn').classList.remove('active');
-        });
-
-        // Canvas settings
-        $('bgColor').addEventListener('input', e => { state.bgColor = e.target.value; render(); });
-        $('resizeBtn').addEventListener('click', () => {
-            state.canvasW = Math.max(100, Math.min(4096, +$('canvasW').value));
-            state.canvasH = Math.max(100, Math.min(4096, +$('canvasH').value));
-            fitView(); render();
-        });
-        document.querySelectorAll('.size-preset-btn').forEach(b => {
-            b.addEventListener('click', () => {
-                $('canvasW').value = b.dataset.w; $('canvasH').value = b.dataset.h;
-                state.canvasW = +b.dataset.w; state.canvasH = +b.dataset.h;
-                fitView(); render();
-            });
-        });
-
-        // Grid
-        $('showGrid').addEventListener('change', e => { state.showGrid = e.target.checked; render(); });
-        $('gridSize').addEventListener('input', e => { state.gridSize = +e.target.value; $('gridSizeVal').textContent = state.gridSize; render(); });
-        $('snapGrid').addEventListener('change', e => { state.snapGrid = e.target.checked; });
-
-        // Reference image
-        $('refImageInput').addEventListener('change', e => {
-            const f = e.target.files[0]; if (!f) return;
-            const img = new Image();
-            img.onload = () => { state.refImage = img; render(); };
-            img.src = URL.createObjectURL(f);
-        });
-        $('refOpacity').addEventListener('input', e => {
-            state.refOpacity = +e.target.value / 100;
-            $('refOpacityVal').textContent = state.refOpacity.toFixed(2); render();
-        });
-        $('removeRefBtn').addEventListener('click', () => { state.refImage = null; render(); });
-
-        window.addEventListener('resize', () => fitView());
+    function isColorDark(hex) {
+        const c = hex.replace('#', '');
+        const r = parseInt(c.substr(0, 2), 16), g = parseInt(c.substr(2, 2), 16), b = parseInt(c.substr(4, 2), 16);
+        return (r * 0.299 + g * 0.587 + b * 0.114) < 128;
     }
 
     function updateInfo() {
@@ -879,78 +629,13 @@
         document.getElementById('pathCount').textContent = `paths: ${state.paths.length}`;
     }
 
-    // ══════════════════════
-    // KEYBOARD SHORTCUTS
-    // ══════════════════════
-    function bindKeyboard() {
-        document.addEventListener('keydown', e => {
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-            if ((e.ctrlKey||e.metaKey) && !e.shiftKey && e.key === 'z') { e.preventDefault(); undo(); }
-            if ((e.ctrlKey||e.metaKey) && e.shiftKey && e.key === 'z') { e.preventDefault(); redo(); }
-            if ((e.ctrlKey||e.metaKey) && e.key === 's') { e.preventDefault(); exportSVG(); }
-            if (e.key === 'p' || e.key === 'P') {
-                document.querySelector('.tool-btn[data-tool="pen"]').click();
-            }
-            if (e.key === 'v' || e.key === 'V') {
-                document.querySelector('.tool-btn[data-tool="select"]').click();
-            }
-            if (e.key === 'a' || e.key === 'A') {
-                document.querySelector('.tool-btn[data-tool="direct"]').click();
-            }
-            if (e.key === 'Enter') { closePath(); newPath(); }
-            if (e.key === 'n' || e.key === 'N') { newPath(); render(); }
-            if (e.key === 'c' || e.key === 'C') { document.getElementById('curveBtn').click(); }
-            if (e.key === 'l' || e.key === 'L') { document.getElementById('lineBtn').click(); }
-            if (e.key === '0' && (e.ctrlKey||e.metaKey)) { e.preventDefault(); fitView(); }
-            if (e.key === 'Escape') {
-                document.getElementById('fullscreen-view').classList.add('hidden');
-            }
-            if (e.key === 'Delete' || e.key === 'Backspace') {
-                // Delete selected anchor or path
-                if (state.tool === 'select' && state.activePath >= 0) {
-                    const p = getActivePath();
-                    if (p && p.anchors.length > 0) {
-                        saveState();
-                        p.anchors.pop();
-                        if (p.anchors.length === 0) {
-                            state.paths.splice(state.activePath, 1);
-                            if (state.paths.length === 0) newPath();
-                            else state.activePath = Math.min(state.activePath, state.paths.length-1);
-                        }
-                        render(); renderPathList(); updateInfo();
-                    }
-                }
-            }
-            // Basic shapes
-            if (e.key === 'r' || e.key === 'R') {
-                addRect(state.canvasW/2, state.canvasH/2, 200, 200);
-            }
-            if (e.key === 'o' || e.key === 'O') {
-                addEllipse(state.canvasW/2, state.canvasH/2, 100, 100);
-            }
-        });
-    }
-
-    // ── Expose shape functions for buttons if needed ──
-    window._letteringAddRect = () => addRect(state.canvasW/2, state.canvasH/2, 200, 200);
-    window._letteringAddEllipse = () => addEllipse(state.canvasW/2, state.canvasH/2, 100, 100);
-    window._letteringUnion = pathUnion;
 
     // ══════════════════════
-    // UTILITY
+    // THEME
     // ══════════════════════
-    function isColorDark(hex) {
-        const c = hex.replace('#','');
-        const r = parseInt(c.substr(0,2),16), g = parseInt(c.substr(2,2),16), b = parseInt(c.substr(4,2),16);
-        return (r*0.299 + g*0.587 + b*0.114) < 128;
-    }
-
-    // ══════════════════════
-    // THEME TOGGLE
-    // ══════════════════════
-    window._letteringToggleTheme = function() {
+    window._letteringToggleTheme = function () {
         const root = document.documentElement;
-        const isDark = getComputedStyle(root).getPropertyValue('--bg-0').trim() === '#0c0c0e';
+        const isDark = isColorDark(state.bgColor);
         if (isDark) {
             root.style.setProperty('--bg-0', '#f0f0f2');
             root.style.setProperty('--bg-1', '#e8e8ec');
@@ -980,10 +665,114 @@
         }
         document.getElementById('bgColor').value = state.bgColor;
         document.getElementById('fillColor').value = state.fillColor;
-        const p = getActivePath();
-        if (p) p.color = state.fillColor;
         render();
     };
+
+    // ══════════════════════
+    // UI BINDING
+    // ══════════════════════
+    function bindUI() {
+        const $ = id => document.getElementById(id);
+
+        // Tools
+        document.querySelectorAll('.tool-btn[data-tool]').forEach(b => {
+            b.addEventListener('click', () => {
+                state.tool = b.dataset.tool;
+                document.querySelectorAll('.tool-btn[data-tool]').forEach(x => x.classList.remove('active'));
+                b.classList.add('active');
+                canvasArea.classList.toggle('select-mode', state.tool === 'select');
+            });
+        });
+
+        // Grid resolution
+        $('gridRes').addEventListener('input', e => {
+            const v = +e.target.value;
+            $('gridResVal').textContent = v;
+            state.gridCols = v; state.gridRows = v;
+            state.pixels = new Uint8Array(v * v);
+            state.paths = [];
+            render();
+        });
+
+        // Smooth amount
+        $('smoothAmount').addEventListener('input', e => {
+            state.smoothAmount = +e.target.value / 100;
+            $('smoothAmountVal').textContent = state.smoothAmount.toFixed(2);
+            vectorize(); render();
+        });
+
+        // View toggles
+        $('showGrid').addEventListener('change', e => { state.showGrid = e.target.checked; render(); });
+        $('showPixels').addEventListener('change', e => { state.showPixels = e.target.checked; render(); });
+        $('showOutline').addEventListener('change', e => { state.showOutline = e.target.checked; render(); });
+        $('showFill').addEventListener('change', e => { state.showFill = e.target.checked; render(); });
+
+        // Colors
+        $('fillColor').addEventListener('input', e => { state.fillColor = e.target.value; render(); });
+        $('bgColor').addEventListener('input', e => { state.bgColor = e.target.value; render(); });
+
+        // Vectorize button
+        $('vectorizeBtn').addEventListener('click', () => { vectorize(); render(); });
+
+        // Export
+        $('exportSvgBtn').addEventListener('click', exportSVG);
+        $('exportPngBtn').addEventListener('click', exportPNG);
+        $('fullscreenBtn').addEventListener('click', showFullscreen);
+        $('closeFullscreen').addEventListener('click', () => $('fullscreen-view').classList.add('hidden'));
+        $('fitBtn').addEventListener('click', fitView);
+
+        // Clear
+        $('clearBtn').addEventListener('click', () => {
+            state.pixels.fill(0);
+            state.paths = [];
+            render(); updateInfo();
+        });
+
+        // Canvas size
+        $('resizeBtn').addEventListener('click', () => {
+            state.canvasW = Math.max(100, Math.min(4096, +$('canvasW').value));
+            state.canvasH = Math.max(100, Math.min(4096, +$('canvasH').value));
+            fitView(); render();
+        });
+        document.querySelectorAll('.size-preset-btn').forEach(b => {
+            b.addEventListener('click', () => {
+                $('canvasW').value = b.dataset.w; $('canvasH').value = b.dataset.h;
+                state.canvasW = +b.dataset.w; state.canvasH = +b.dataset.h;
+                fitView(); render();
+            });
+        });
+
+        // Reference image
+        $('refImageInput').addEventListener('change', e => {
+            const f = e.target.files[0]; if (!f) return;
+            const img = new Image();
+            img.onload = () => { state.refImage = img; render(); };
+            img.src = URL.createObjectURL(f);
+        });
+        $('refOpacity').addEventListener('input', e => {
+            state.refOpacity = +e.target.value / 100;
+            $('refOpacityVal').textContent = state.refOpacity.toFixed(2); render();
+        });
+        $('removeRefBtn').addEventListener('click', () => { state.refImage = null; render(); });
+
+        window.addEventListener('resize', () => fitView());
+    }
+
+    // ══════════════════════
+    // KEYBOARD
+    // ══════════════════════
+    function bindKeyboard() {
+        document.addEventListener('keydown', e => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); exportSVG(); }
+            if (e.key === 'd' || e.key === 'D') document.querySelector('.tool-btn[data-tool="draw"]').click();
+            if (e.key === 'e' || e.key === 'E') document.querySelector('.tool-btn[data-tool="erase"]').click();
+            if (e.key === 'v' || e.key === 'V') document.querySelector('.tool-btn[data-tool="select"]').click();
+            if (e.key === '0' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); fitView(); }
+            if (e.key === 'Escape') document.getElementById('fullscreen-view').classList.add('hidden');
+            if (e.key === ' ') { e.preventDefault(); vectorize(); render(); }
+        });
+    }
 
     init();
 })();
